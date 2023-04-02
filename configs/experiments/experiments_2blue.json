@@ -1,0 +1,72 @@
+{
+    "hybridGT_5hp_localemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "hybrid",
+        "aggregation_fn": "local",
+        "n_blue": 2
+    },
+    "hybridGT_5hp_globalemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "hybrid",
+        "aggregation_fn": "global",
+        "n_blue": 2
+    },
+    "hybridGT_5hp_hybridemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "hybrid",
+        "aggregation_fn": "hybrid",
+        "n_blue": 2
+    },
+
+
+    "hybridGAT_5hp_localemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "gnn",
+        "is_hybrid": true,
+        "conv_type": "gat",
+        "aggregation_fn": "local",
+        "n_blue": 2
+    },
+    "hybridGAT_5hp_globalemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "gnn",
+        "is_hybrid": true,
+        "conv_type": "gat",
+        "aggregation_fn": "global",
+        "n_blue": 2
+    },
+    "hybridGAT_5hp_hybridemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "gnn",
+        "is_hybrid": true,
+        "conv_type": "gat",
+        "aggregation_fn": "hybrid",
+        "n_blue": 2
+    },
+
+
+    "hybridGCN_5hp_localemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "gnn",
+        "is_hybrid": true,
+        "conv_type": "gcn",
+        "aggregation_fn": "local",
+        "n_blue": 2
+    },
+    "hybridGCN_5hp_globalemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "gnn",
+        "is_hybrid": true,
+        "conv_type": "gcn",
+        "aggregation_fn": "global",
+        "n_blue": 2
+    },
+    "hybridGCN_5hp_hybridemb_NOOPT_1r2b": {
+        "init_health": 5,
+        "model": "gnn",
+        "is_hybrid": true,
+        "conv_type": "gcn",
+        "aggregation_fn": "hybrid",
+        "n_blue": 2
+    }
+}
