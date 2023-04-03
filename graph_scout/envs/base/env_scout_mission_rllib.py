@@ -1,7 +1,8 @@
 from gym import spaces
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.models.catalog import MODEL_DEFAULTS
-#from ray.rllib.agents import dqn
+
+# from ray.rllib.agents import dqn
 import numpy as np
 import os
 import time
@@ -9,10 +10,11 @@ import time
 import sys
 from .env_scout_mission_std import ScoutMissionStd
 
-#from . import default_setup as env_setup
-#local_action_move = env_setup.act.MOVE_LOOKUP
-#local_action_turn = env_setup.act.TURN_90_LOOKUP
+# from . import default_setup as env_setup
+# local_action_move = env_setup.act.MOVE_LOOKUP
+# local_action_turn = env_setup.act.TURN_90_LOOKUP
 from . import action_lookup as env_setup
+
 local_action_move = env_setup.MOVE_LOOKUP
 local_action_turn = env_setup.TURN_3_LOOKUP
 
@@ -22,21 +24,24 @@ local_action_turn = env_setup.TURN_3_LOOKUP
 class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
     def __init__(self, config=None):
         config = config or {}
-        #super(ScoutMissionStd).__init__(**config)
-        #super(MultiAgentEnv).__init__()
+        # super(ScoutMissionStd).__init__(**config)
+        # super(MultiAgentEnv).__init__()
         super().__init__(**config)
-        #super(ScoutMissionStdRLLib, ScoutMissionStd).__init__(**config)
-        #super(ScoutMissionStdRLLib, MultiAgentEnv).__init__()
-        
+        # super(ScoutMissionStdRLLib, ScoutMissionStd).__init__(**config)
+        # super(ScoutMissionStdRLLib, MultiAgentEnv).__init__()
+
         # extra values to make graph embedding viable
-        self.action_space = self.action_space[0] #spaces.Tuple(self.action_space)
-        self.observation_space = self.observation_space[0] # spaces.Tuple(self.observation_space)
-        #self._agent_ids = set(self.get_agent_ids()) # TODO
+        self.action_space = self.action_space[0]  # spaces.Tuple(self.action_space)
+        self.observation_space = self.observation_space[
+            0
+        ]  # spaces.Tuple(self.observation_space)
+        # self._agent_ids = set(self.get_agent_ids()) # TODO
         self.done = set()
 
     # return an arbitrary encoding from the "flat" action space to the normal action space 0-indexed
     def convert_discrete_action_to_multidiscrete(self, action):
         return [action % len(local_action_move), action // len(local_action_move)]
+
     def convert_multidiscrete_action_to_discrete(move_action, turn_action):
         return turn_action * len(local_action_move) + move_action
 
@@ -47,7 +52,7 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
         super().reset()
         self.done = set()
         return self.states.dump_dict()[0]
-    
+
     def step(self, _n_actions: dict):
         n_actions = []
         for _id in self.states.name_list:
@@ -56,18 +61,18 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
             else:
                 n_actions.append(self.action_space.sample())
         super().step(n_actions)
-        #print(n_actions)
-        #time.sleep(0.1)
+        # print(n_actions)
+        # time.sleep(0.1)
         obs, rew, done = self.states.dump_dict()
         all_done = True
         for k in done:
             if done[k]:
                 self.done.add(k)
             all_done = all_done and done[k]
-        done['__all__'] = all_done
+        done["__all__"] = all_done
 
         # make sure to only report done ids once
         for id in self.done:
             done.pop(id)
-        #print(rew)
+        # print(rew)
         return obs, rew, done, {}

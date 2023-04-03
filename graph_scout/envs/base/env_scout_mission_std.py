@@ -28,8 +28,11 @@ class ScoutMissionStd(gym.Env):
 
         # 2 init Multi-branched action gym space & flattened observation gym space
         from gym import spaces
+
         self.action_space = [spaces.MultiDiscrete(self.acts.shape())] * self.states.num
-        self.observation_space = [spaces.Box(low=0., high=1., shape=(self.states.shape * 2,))] * self.states.num
+        self.observation_space = [
+            spaces.Box(low=0.0, high=1.0, shape=(self.states.shape * 2,))
+        ] * self.states.num
 
     def reset(self, force=False, **kwargs):
         self.step_counter = 0
@@ -61,6 +64,7 @@ class ScoutMissionStd(gym.Env):
         # step rewards: stored @self.states.rewards[:, n_step]
         if self.rew_cfg["step"]["rew_step_on"]:
             n_rewards = self.get_step_rewards(_invalid)
+        # print(f"step rewards: {n_rewards}")
         # n_rewards = self.states.get_reward_list(self.step_counter)
         # True: if an agent loses all health points (or @max_step)
         n_done = self.get_done_list(force_stop)
@@ -72,12 +76,15 @@ class ScoutMissionStd(gym.Env):
                 _ep_rewards = self.get_episode_rewards()
                 for _id in range(len(n_rewards)):
                     n_rewards[_id] += _ep_rewards[_id]
+        # print(f"+ ep rewards: {n_rewards}")
         return self.states.obs_full, n_rewards, n_done, {}
 
     # 1.1 manage actions for observing agents
     def validate_actions(self, step_actions):
         action_penalty = [0] * self.states.num
-        assert self.states.num == len(step_actions), f"[GSMEnv][Step] Unexpected action shape: {step_actions}"
+        assert self.states.num == len(
+            step_actions
+        ), f"[GSMEnv][Step] Unexpected action shape: {step_actions}"
 
         for _index in range(self.states.num):
             actions = step_actions[_index]
@@ -117,7 +124,7 @@ class ScoutMissionStd(gym.Env):
 
     # 1.2 manage actions for all other agents
     def prep_other_agent_state(self):
-        """ # TODO (lv1) only support heuristic_blue + lr_red now
+        """# TODO (lv1) only support heuristic_blue + lr_red now
         # get all other agents' next states before executing mini-steps
         # decision trees for DT agents
         # behavior branches: {[0,1]:"FORWARD", [2,3,4]:"ASSIST", [5]:"RETREAT"}
@@ -141,7 +148,9 @@ class ScoutMissionStd(gym.Env):
 
             # change behavior branch
             cur_branch = self.assist_mat[_index, _index]
-            tar_branch = self.bxs_id[self._get_val_from_list(_agent.health/_agent.health_max, self.bxs_HP)]
+            tar_branch = self.bxs_id[
+                self._get_val_from_list(_agent.health / _agent.health_max, self.bxs_HP)
+            ]
             # forward (default)
             if tar_branch <= cur_branch:
                 continue
@@ -186,7 +195,9 @@ class ScoutMissionStd(gym.Env):
                 for a_tar in self.agents.ids_R:
                     tar_node = self.engage_mat[a_tar, a_tar]  # [a_tar, -1]
                     if self.map.g_view.has_edge(src_node, tar_node):
-                        tar_dist[a_tar] = self.map.get_Gview_edge_attr_dist(src_node, tar_node)
+                        tar_dist[a_tar] = self.map.get_Gview_edge_attr_dist(
+                            src_node, tar_node
+                        )
                 # If opposite agents are in sight
                 if any(tar_dist):
                     _ids = list(tar_dist.keys())
@@ -238,7 +249,9 @@ class ScoutMissionStd(gym.Env):
             for _index, a_id in enumerate(self.agents.ids_ob):
                 # masking invalid move actions on the given node
                 acts = self.act_move_set  # set(self.acts.move.keys())
-                valid = set(self.map.get_Gmove_all_action(self.agents.gid[a_id].at_node) + [0])
+                valid = set(
+                    self.map.get_Gmove_all_action(self.agents.gid[a_id].at_node) + [0]
+                )
                 invalid = [_act for _act in acts if _act not in valid]
                 self.action_mask[_index][invalid] = True
         return False
@@ -287,7 +300,9 @@ class ScoutMissionStd(gym.Env):
         _field_damage = self.configs["damage_field"]
         _step_damage = self.configs["damage_single"]
         n_mini_step = self.configs["num_sub_step"]
-        mid_step = int(n_mini_step / 2)  # use self.configs["num_sub_node"] for more reference sub-nodes
+        mid_step = int(
+            n_mini_step / 2
+        )  # use self.configs["num_sub_node"] for more reference sub-nodes
 
         for sub_step in range(n_mini_step):
             # change anchor node from move_src to move_tar after half mini_steps
@@ -369,7 +384,7 @@ class ScoutMissionStd(gym.Env):
         prob_fin = prob_raw + self.zones[zone_id]["prob_add"]
         # prob_fin = prob_fin * self.zones[zone_id]["prob_mul"]
         # generate a random number in the range of [0., 1.]
-        tar_value = uniform(0., 1.)
+        tar_value = uniform(0.0, 1.0)
         # determine if cause damage during this interaction
         return tar_value < prob_fin
 
@@ -382,12 +397,14 @@ class ScoutMissionStd(gym.Env):
         v_pos = self.engage_mat[v_id, -2]
         pos_u_v = self._get_pos_u_v(u_pos, v_pos)
         # get the engagement probability
-        edge_num, prob_raw = self.map.get_Gview_prob_by_dir_pos(u_node, v_node, u_dir, pos_u_v)
+        edge_num, prob_raw = self.map.get_Gview_prob_by_dir_pos(
+            u_node, v_node, u_dir, pos_u_v
+        )
         return edge_num, prob_raw
 
     # 2.3 customized observation calculation
     def update_observation(self):
-        """ ===> setup custom observation shape & value
+        """===> setup custom observation shape & value
         # set values in the teammate and opposite observation slots
         # 1.0 at node
         # 0.5 inside dangerous zone
@@ -415,8 +432,10 @@ class ScoutMissionStd(gym.Env):
             self.states.obs_R[_src - 1] = obs_value[-1]
 
         # update elements in team blue slot
-        node_end = self.configs["field_boundary_node"]  # machine gun coverage area [0 to node_end]
-        # add min_val for nodes covered by blue's machine gun squad 
+        node_end = self.configs[
+            "field_boundary_node"
+        ]  # machine gun coverage area [0 to node_end]
+        # add min_val for nodes covered by blue's machine gun squad
         self.states.obs_B[0:node_end] = obs_value[0]
         for b_id in self.agents.ids_B:
             _dir, _pos, _src = self.engage_mat[b_id, -3:]
@@ -437,7 +456,7 @@ class ScoutMissionStd(gym.Env):
 
     # 2.3.1. get zone token
     def _get_zone_token(self, node_src, node_tar) -> int:
-        """ zone token lookup for engage matrix updates
+        """zone token lookup for engage matrix updates
         # check self.configs["engage_token"] for more details
         # if there is an edge in the visibility FOV graph;
         # [!] no self-loop in the visibility graph, check if two agents are on the same node first
@@ -447,7 +466,9 @@ class ScoutMissionStd(gym.Env):
         if self.map.g_view.has_edge(node_src, node_tar):
             dist = self.map.get_Gview_edge_attr_dist(node_src, node_tar)
             # -1 indicates there is no visibility range limitation
-            max_range = self.configs["sight_range"]  # or self.zones[1]['dist'] if it is not provided
+            max_range = self.configs[
+                "sight_range"
+            ]  # or self.zones[1]['dist'] if it is not provided
             if max_range and dist > max_range:
                 return 0
             return self._get_zone_by_dist(dist)
@@ -518,7 +539,9 @@ class ScoutMissionStd(gym.Env):
                 agent_death.add(_index)
         # team based final reward for all agents in team red
         team_delay = self._get_delay_reward_by_step(**rew_cfg["rew_ep_delay"])
-        health_index = self._get_val_from_list(health_sum/health_max, rew_cfg["rew_ep_health"]["bar"])
+        health_index = self._get_val_from_list(
+            health_sum / health_max, rew_cfg["rew_ep_health"]["bar"]
+        )
         team_health = rew_cfg["rew_ep_health"]["num"][health_index]
         total_reward = team_delay + team_health
         if len(agent_death):
@@ -539,10 +562,16 @@ class ScoutMissionStd(gym.Env):
         _index = self._get_val_from_list(self.step_counter, val_dict["step"])
         if _index:
             for _pre in range(1, _index):
-                delay_reward += (val_dict["step"][_pre] - val_dict["step"][_pre - 1]) * val_dict["inc"][_pre]
-            delay_reward += (self.step_counter - val_dict["step"][_index - 1]) * val_dict["inc"][_index - 1]
+                delay_reward += (
+                    val_dict["step"][_pre] - val_dict["step"][_pre - 1]
+                ) * val_dict["inc"][_pre]
+            delay_reward += (
+                self.step_counter - val_dict["step"][_index - 1]
+            ) * val_dict["inc"][_index - 1]
         else:
-            delay_reward += (self.step_counter - val_dict["step"][0]) * val_dict["inc"][0]
+            delay_reward += (self.step_counter - val_dict["step"][0]) * val_dict["inc"][
+                0
+            ]
         if delay_reward > val_dict["max"]:
             delay_reward = val_dict["max"]
         return delay_reward
@@ -582,17 +611,19 @@ class ScoutMissionStd(gym.Env):
         if self.step_counter >= self.max_step:
             return [True] * self.states.num
         # all team_Blue or team_Red agents got terminated
-        if all([self.agents.gid[_id].death for _id in self.agents.ids_R])\
-                or all([self.agents.gid[_id].death for _id in self.agents.ids_B]):
+        if all([self.agents.gid[_id].death for _id in self.agents.ids_R]) or all(
+            [self.agents.gid[_id].death for _id in self.agents.ids_B]
+        ):
             return [True] * self.states.num
         # death => done for each observing agent (early termination)
         return [self.agents.gid[_id].death for _id in self.agents.ids_ob]
 
     # 0.1. load configs and update local defaults
     def _init_env_config(self, **kwargs):
-        """ set default env config values if not specified in outer configs """
+        """set default env config values if not specified in outer configs"""
         from graph_scout.envs.utils.config.default_configs import init_setup as env_cfg
         from copy import deepcopy
+
         self.configs = deepcopy(env_cfg["INIT_ENV"])
         self.rew_cfg = deepcopy(env_cfg["INIT_REWARD"])
         self.log_cfg = {}
@@ -643,15 +674,26 @@ class ScoutMissionStd(gym.Env):
 
     # 0.2. load terrain graphs. [*]executable after calling self._init_env_config()
     def _load_map_graph(self):
-        from graph_scout.envs.data.file_manager import check_parsed_files, load_graph_files, generate_graph_files
+        from graph_scout.envs.data.file_manager import (
+            check_parsed_files,
+            load_graph_files,
+            generate_graph_files,
+        )
         from graph_scout.envs.data.terrain_graph import MapInfo
+
         # load or generate graphs
         self.map = MapInfo()
-        _files, _flags = check_parsed_files(self.configs["env_path"], self.configs["map_id"])
+        _files, _flags = check_parsed_files(
+            self.configs["env_path"], self.configs["map_id"]
+        )
         if all(_flags):
-            self.map = load_graph_files(self.configs["env_path"], self.configs["map_id"], _files)
+            self.map = load_graph_files(
+                self.configs["env_path"], self.configs["map_id"], _files
+            )
         else:
-            self.map = generate_graph_files(self.configs["env_path"], self.configs["map_id"])
+            self.map = generate_graph_files(
+                self.configs["env_path"], self.configs["map_id"]
+            )
         # set up range limits
         self.zones = self.configs["engage_range"]
         # manually adjust the probs for imbalance node pairs
@@ -673,32 +715,48 @@ class ScoutMissionStd(gym.Env):
                 for _node in u_adj:
                     if _node == _tar:
                         continue
-                    if u_adj[_node][0]['dist'] > self.zones[3]['dist']:
+                    if u_adj[_node][0]["dist"] > self.zones[3]["dist"]:
                         continue
                     for _edge in u_adj[_node]:
-                        if u_adj[_node][_edge]['dir'] in _dirs:
+                        if u_adj[_node][_edge]["dir"] in _dirs:
                             _prob = u_adj[_node][_edge]["prob"]
-                            u_adj[_node][_edge]["prob"] = max(_prob + min(0.20, _prob/2), 0.80)
+                            u_adj[_node][_edge]["prob"] = max(
+                                _prob + min(0.20, _prob / 2), 0.80
+                            )
 
     # 0.3. initialize all agents. [*] executable after calling self._init_env_config()
     def _init_agent_state(self):
         # init agent instances
-        self.agents = AgentManager(self.configs["num_red"], self.configs["num_blue"],
-                                   self.configs["health_red"], self.configs["health_blue"],
-                                   **self.configs["agents_init"])
+        self.agents = AgentManager(
+            self.configs["num_red"],
+            self.configs["num_blue"],
+            self.configs["health_red"],
+            self.configs["health_blue"],
+            **self.configs["agents_init"],
+        )
         _id, _name, _team = self.agents.get_observing_agent_info()
         # init state instance < default: agents have identical observation shape [teammate slot + opposite slot] >
-        self.states = StateManager(len(self.agents.ids_ob), self.map.get_graph_size(), self.max_step,
-                                   _id, _name, _team)
+        self.states = StateManager(
+            len(self.agents.ids_ob),
+            self.map.get_graph_size(),
+            self.max_step,
+            _id,
+            _name,
+            _team,
+        )
         # lookup dicts for all action branches
         self.acts = actsEval()
         self.act_move_set = set(self.acts.move.keys())
         if self.invalid_masked:
             # size of the mask for each agent is the flattened action tensor
-            self.action_mask = np.zeros((self.states.num, sum(self.acts.shape())), dtype=bool)
+            self.action_mask = np.zeros(
+                (self.states.num, sum(self.acts.shape())), dtype=bool
+            )
 
         # generate engagement matrix for all agent-pairs + [dir, pos, target_node_after_move] per agent
-        self.engage_mat = np.zeros((self.agents.n_all, self.agents.n_all + 3), dtype=int)
+        self.engage_mat = np.zeros(
+            (self.agents.n_all, self.agents.n_all + 3), dtype=int
+        )
         # init current status elements for all agents
         for _a in range(self.agents.n_all):
             _node, _dir, _pos = self.agents.gid[_a].get_geo_tuple()
@@ -722,7 +780,7 @@ class ScoutMissionStd(gym.Env):
     def _log_step_states(self):
         return self.states.dump_dict() if self.logger else []
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         pass
 
     # delete local instances
@@ -755,7 +813,9 @@ class AgentManager:
 
         self._load_init_configs(n_red, n_blue, health_red, health_blue, **agent_config)
 
-    def _load_init_configs(self, n_red, n_blue, health_red, health_blue, **agent_config):
+    def _load_init_configs(
+        self, n_red, n_blue, health_red, health_blue, **agent_config
+    ):
         # agent global_id is indexing from 0
         g_id = 0
         default_HP = [health_red, health_blue]
@@ -773,26 +833,46 @@ class AgentManager:
 
             # skip this config if we already have the requisite number of agents on this team
             if (
-                _team and len(self.ids_B) == n_blue
-                or not _team and len(self.ids_R) == n_red
+                _team
+                and len(self.ids_B) == n_blue
+                or not _team
+                and len(self.ids_R) == n_red
             ):
                 continue
 
             # learning agents
             if _type == "RL":
                 _node = a_dict["node"]
-                self.gid.append(AgentCoop(global_id=g_id, name=_name, team_id=_team, health=_HP,
-                                          node=_node, direction=_dir, posture=_pos,
-                                          _learning=a_dict["is_lr"],
-                                          _observing=a_dict["is_ob"]))
+                self.gid.append(
+                    AgentCoop(
+                        global_id=g_id,
+                        name=_name,
+                        team_id=_team,
+                        health=_HP,
+                        node=_node,
+                        direction=_dir,
+                        posture=_pos,
+                        _learning=a_dict["is_lr"],
+                        _observing=a_dict["is_ob"],
+                    )
+                )
                 self.ids_ob.append(g_id)
                 self.list_init.append([_node, 0, _dir, _pos, _HP])
 
             # pre-determined agents
             elif _type == "DT":
                 _path = a_dict["path"]
-                self.gid.append(AgentHeur(global_id=g_id, name=_name, team_id=_team, health=_HP,
-                                          path=_path, direction=_dir, posture=_pos))
+                self.gid.append(
+                    AgentHeur(
+                        global_id=g_id,
+                        name=_name,
+                        team_id=_team,
+                        health=_HP,
+                        path=_path,
+                        direction=_dir,
+                        posture=_pos,
+                    )
+                )
                 self.ids_dt.append(g_id)
                 self.list_init.append([0, 0, _dir, _pos, _HP])
                 self.dict_path[g_id] = _path
@@ -811,16 +891,21 @@ class AgentManager:
         # TBD(a): add default RL agents if not enough agent_init_configs were provided
         # or just raise error
         if len(self.ids_R) != n_red or len(self.ids_B) != n_blue:
-            raise ValueError("[GSMEnv][Init] Not enough agent init configs were provided.")
+            raise ValueError(
+                "[GSMEnv][Init] Not enough agent init configs were provided."
+            )
 
     def reset(self):
         for _id in self.ids_ob:
-            self.gid[_id].reset(list_states=self.list_init[_id][0:-1],
-                                health=self.list_init[_id][-1])
+            self.gid[_id].reset(
+                list_states=self.list_init[_id][0:-1], health=self.list_init[_id][-1]
+            )
         for _id in self.ids_dt:
-            self.gid[_id].reset(list_states=self.list_init[_id][0:-1],
-                                health=self.list_init[_id][-1],
-                                path=self.dict_path[_id])
+            self.gid[_id].reset(
+                list_states=self.list_init[_id][0:-1],
+                health=self.list_init[_id][-1],
+                path=self.dict_path[_id],
+            )
 
     def get_observing_agent_info(self):
         list_name = []
@@ -854,12 +939,12 @@ class StateManager:
 
     def reset(self):
         self.reset_step()
-        self.rewards[:] = 0.
+        self.rewards[:] = 0.0
         self.done_array[:] = False
 
     def reset_step(self):
-        self.obs_R[:] = 0.
-        self.obs_B[:] = 0.
+        self.obs_R[:] = 0.0
+        self.obs_B[:] = 0.0
 
     def obs_update(self):
         # shared team observation from red's perspective
@@ -869,7 +954,9 @@ class StateManager:
             # shared team observation from blue's perspective
             obs_team_B = np.concatenate((self.obs_B, self.obs_R), axis=None)
             for index in range(self.num):
-                self.obs_full[index] = obs_team_B if self.team_list[index] else obs_team_R
+                self.obs_full[index] = (
+                    obs_team_B if self.team_list[index] else obs_team_R
+                )
         else:
             # fast copy for all red condition
             self.obs_full = np.tile(obs_team_R, (self.num, 1))
