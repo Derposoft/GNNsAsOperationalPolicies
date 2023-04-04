@@ -24,18 +24,11 @@ local_action_turn = env_setup.TURN_3_LOOKUP
 class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
     def __init__(self, config=None):
         config = config or {}
-        # super(ScoutMissionStd).__init__(**config)
-        # super(MultiAgentEnv).__init__()
         super().__init__(**config)
-        # super(ScoutMissionStdRLLib, ScoutMissionStd).__init__(**config)
-        # super(ScoutMissionStdRLLib, MultiAgentEnv).__init__()
 
         # extra values to make graph embedding viable
-        self.action_space = self.action_space[0]  # spaces.Tuple(self.action_space)
-        self.observation_space = self.observation_space[
-            0
-        ]  # spaces.Tuple(self.observation_space)
-        # self._agent_ids = set(self.get_agent_ids()) # TODO
+        self.action_space = self.action_space[0]
+        self.observation_space = self.observation_space[0]
         self.done = set()
 
     # return an arbitrary encoding from the "flat" action space to the normal action space 0-indexed
@@ -63,7 +56,7 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
         super().step(n_actions)
         # print(n_actions)
         # time.sleep(0.1)
-        obs, rew, done = self.states.dump_dict()
+        obs, rew, done = self.states.dump_dict(step=self.step_counter)
         all_done = True
         for k in done:
             if done[k]:
@@ -74,5 +67,4 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
         # make sure to only report done ids once
         for id in self.done:
             done.pop(id)
-        # print(rew)
         return obs, rew, done, {}

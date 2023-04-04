@@ -64,7 +64,7 @@ class ScoutMissionStd(gym.Env):
         # step rewards: stored @self.states.rewards[:, n_step]
         if self.rew_cfg["step"]["rew_step_on"]:
             n_rewards = self.get_step_rewards(_invalid)
-        # print(f"step rewards: {n_rewards}")
+
         # n_rewards = self.states.get_reward_list(self.step_counter)
         # True: if an agent loses all health points (or @max_step)
         n_done = self.get_done_list(force_stop)
@@ -76,7 +76,6 @@ class ScoutMissionStd(gym.Env):
                 _ep_rewards = self.get_episode_rewards()
                 for _id in range(len(n_rewards)):
                     n_rewards[_id] += _ep_rewards[_id]
-        # print(f"+ ep rewards: {n_rewards}")
         return self.states.obs_full, n_rewards, n_done, {}
 
     # 1.1 manage actions for observing agents

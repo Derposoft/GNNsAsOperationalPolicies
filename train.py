@@ -153,7 +153,7 @@ def create_trainer_config(
         "evaluation_interval": 1,
         "evaluation_num_episodes": 10,
         "evaluation_num_workers": 1,
-        "rollout_fragment_length": 100,  # 50 for a2c, 200 for everyone else?
+        "rollout_fragment_length": 200,  # 50 for a2c, 200 for everyone else?
         "train_batch_size": 200,
         "log_level": "ERROR",
         "seed": SEED,
@@ -228,8 +228,8 @@ def run_baselines(
         trainer.framework("torch").training(
             lr=config.lr,
             model=ppo_config["model"],
-            train_batch_size=100,
-            sgd_minibatch_size=64,
+            train_batch_size=200,
+            sgd_minibatch_size=128,
         )
         # .exploration(exploration_config={"type": "StochasticSampling"})
         .build(env, logger_creator=custom_log_creator(config.name))
