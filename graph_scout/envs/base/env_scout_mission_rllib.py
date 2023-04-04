@@ -54,9 +54,10 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
             else:
                 n_actions.append(self.action_space.sample())
         super().step(n_actions)
-        # print(n_actions)
-        # time.sleep(0.1)
-        obs, rew, done = self.states.dump_dict(step=self.step_counter)
+
+        obs, rew, done = self.states.dump_dict(
+            step=self.step_counter, provide_totals=True
+        )
         all_done = True
         for k in done:
             if done[k]:

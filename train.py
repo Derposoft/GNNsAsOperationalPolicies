@@ -36,7 +36,7 @@ from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print
 from ray.tune.logger import UnifiedLogger
 
-ray.init(num_gpus=torch.cuda.device_count(), num_cpus=2)  # 30
+ray.init(num_gpus=torch.cuda.device_count(), num_cpus=4)  # 30
 SEED = 0
 
 
@@ -154,7 +154,7 @@ def create_trainer_config(
         "evaluation_num_episodes": 10,
         "evaluation_num_workers": 1,
         "rollout_fragment_length": 200,  # 50 for a2c, 200 for everyone else?
-        "train_batch_size": 200,
+        "train_batch_size": 800,
         "log_level": "ERROR",
         "seed": SEED,
     }

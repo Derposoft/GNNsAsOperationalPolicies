@@ -20,7 +20,7 @@ import shlex
 from multiprocessing.pool import ThreadPool
 
 
-N_PROCS = 2     #multiprocessing.cpu_count() // 2
+N_PROCS = 2  # multiprocessing.cpu_count() // 2
 N_SEEDS = 1
 START_SEED = 0
 
@@ -40,11 +40,16 @@ for experiment_name in experiments:
             + f" --seed {i+START_SEED}"
         )
 
+
 # https://stackoverflow.com/questions/25120363/multiprocessing-execute-external-command-and-wait-before-proceeding
 def call_proc(cmd):
-    p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(
+        shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
     out, err = p.communicate()
     return (out, err)
+
+
 print(f"running on {multiprocessing.cpu_count()} cpus")
 print(f"choosing to run {N_PROCS} processes")
 pool = ThreadPool(N_PROCS)

@@ -922,6 +922,7 @@ class StateManager:
     def __init__(self, num=0, shape=0, max_step=0, ids=None, names=None, teams=None):
         self.num = num
         self.shape = shape
+        self.max_step = max_step
         # agent lookup
         self.a_id = [0] if ids is None else ids
         # dict keys
@@ -963,7 +964,7 @@ class StateManager:
     def get_reward_list(self, step):
         return self.rewards[:, step].tolist()
 
-    def dump_dict(self, step=0):
+    def dump_dict(self, step=0, provide_totals=False):
         _dict_obs = {}
         _dict_rew = {}
         _dict_done = {}
@@ -972,4 +973,8 @@ class StateManager:
             _dict_obs[_key] = self.obs_full[_id]
             _dict_rew[_key] = self.rewards[_id, step]
             _dict_done[_key] = self.done_array[_id]
+
+            # If the episode if over, also provide the episode rewards for each agent
+            if provide_totals and (step == self.max_step or all(self.done_array)):
+                _dict_rew[_key] += self.rewards[_id, 0]
         return _dict_obs, _dict_rew, _dict_done
