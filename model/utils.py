@@ -49,7 +49,7 @@ NODE_EMBED_SIZE = (
 )
 SCOUT_NODE_EMBED_SIZE = 2
 OPT_SETTINGS = {
-    "flanking": False,  # does positioning on this node consistute "flanking" the enemy?
+    "flanking": True,  # does positioning on this node consistute "flanking" the enemy?
     "scout_high_ground": True,
 }
 
@@ -85,11 +85,8 @@ def set_obs_token(OBS_TOKEN):
         + (4 if GRAPH_OBS_TOKEN["embed_opt"] else 0)
     )
     SCOUT_NODE_EMBED_SIZE = GRAPH_OBS_TOKEN["embedding_size_scout"] + (
-        1
-        if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["scout_high_ground"]
-        else 0 + 4
-        if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["flanking"]
-        else 0
+        (1 if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["scout_high_ground"] else 0)
+        + (4 if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["flanking"] else 0)
     )
     print("running set")
 
@@ -100,9 +97,7 @@ def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
     high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
 
     # create extra node embeddings to add to
-    extra_node_embeddings = torch.zeros(
-        [batch_size, pos_obs_size, SCOUT_NODE_EMBED_SIZE - 2]
-    )
+    extra_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
     for u, v, dirs in high_ground_points:
         extra_node_embeddings[:, u, -1] = 1
     return extra_node_embeddings
@@ -138,11 +133,7 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
                 for j in range(pos_obs_size):
                     if x[pos_obs_size : 2 * pos_obs_size][j]:
                         blue_positions.add(j)
-                map.g_acs = (
-                    map.g_move
-                )  # add these 2 to interface it with the old function
-                map.g_vis = map.g_view
-                opt = flank_optimization(
+                opt = flank_optimization_scout(
                     map,
                     red_position,
                     blue_positions,
@@ -152,7 +143,6 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
             node_embeddings = torch.cat(
                 [node_embeddings, extra_node_embeddings_flanking], dim=-1
             )
-    print(node_embeddings.shape)
     return node_embeddings
 
 
@@ -532,6 +522,15 @@ def create_policy_fc(
             )
     _hidden_layers = nn.Sequential(*layers)
     return _hidden_layers, _logits
+
+
+def flank_optimization_scout(
+    map: ScoutMapInfo, red_location: int, blue_locations: List[int]
+):
+    # add these 2 to interface it with the old function
+    map.g_acs = map.g_move
+    map.g_vis = map.g_view
+    return flank_optimization(map, red_location, blue_locations)
 
 
 def flank_optimization(map: Fig8MapInfo, red_location: int, blue_locations: List[int]):
