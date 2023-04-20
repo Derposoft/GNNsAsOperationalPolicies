@@ -1,11 +1,7 @@
 from collections import deque
 import sys
 import numpy as np
-from graph_scout.envs.data.terrain_graph import MapInfo as ScoutMapInfo
 import heapq
-import sigma_graph.envs.figure8.default_setup as env_setup
-from sigma_graph.envs.figure8 import action_lookup
-from sigma_graph.data.graph.skirmish_graph import MapInfo as Fig8MapInfo
 from torchinfo import summary
 from ray.rllib.utils.annotations import override
 from ray.rllib.models.torch.misc import SlimFC, normc_initializer
@@ -16,14 +12,20 @@ from torch_geometric.nn.aggr import Aggregation
 import torch_geometric.nn.aggr as aggr
 import torch_geometric.nn.pool as pool
 from typing import List
+from functools import lru_cache
 
+from graph_scout.envs.data.terrain_graph import MapInfo as ScoutMapInfo
+from graph_scout.envs.utils.config import default_configs as scout_config
+import sigma_graph.envs.figure8.default_setup as env_setup
+from sigma_graph.envs.figure8 import action_lookup
+from sigma_graph.data.graph.skirmish_graph import MapInfo as Fig8MapInfo
 
 # constants/helper functions
 VALUE_HIDDENS = [175, 175]
 NETWORK_SETTINGS = {
     "has_final_layer": True,
     "use_altr_model": False,
-    #"use_s2v": False,
+    # "use_s2v": False,
 }
 SUPPRESS_WARNINGS = {
     "embed": False,
@@ -32,11 +34,12 @@ SUPPRESS_WARNINGS = {
     "optimization_none": False,
 }
 GRAPH_OBS_TOKEN = {
-    "embedding_size": 5,#7, #10
+    "embedding_size": 5,  # 7, #10
+    "embedding_size_scout": 2,  # 7, #10
     "obs_embed": True,
     "embed_pos": False,
     "embed_dir": True,
-    "embed_opt": True,
+    "embed_opt": False,
 }
 NODE_EMBED_SIZE = (
     GRAPH_OBS_TOKEN["embedding_size"]
@@ -46,9 +49,15 @@ NODE_EMBED_SIZE = (
 )
 SCOUT_NODE_EMBED_SIZE = 2
 OPT_SETTINGS = {
-    "flanking": True, # does positioning on this node consistute "flanking" the enemy?
+    "flanking": False,  # does positioning on this node consistute "flanking" the enemy?
+    "scout_high_ground": True,
 }
-def ERROR_MSG(e): return f"ERROR READING OBS: {e}"
+
+
+def ERROR_MSG(e):
+    return f"ERROR READING OBS: {e}"
+
+
 VIEW_DEGS = {
     "view_1deg_away": None,
     "view_2deg_away": None,
@@ -67,7 +76,7 @@ def set_obs_token(OBS_TOKEN):
     update obs token and update node embedding size accordingly. only run BEFORE
     training (not during or after), otherwise everything breaks since tensor sizes will change.
     """
-    global NODE_EMBED_SIZE
+    global NODE_EMBED_SIZE, SCOUT_NODE_EMBED_SIZE
     GRAPH_OBS_TOKEN.update(OBS_TOKEN)
     NODE_EMBED_SIZE = (
         GRAPH_OBS_TOKEN["embedding_size"]
@@ -75,6 +84,28 @@ def set_obs_token(OBS_TOKEN):
         + (1 if GRAPH_OBS_TOKEN["embed_dir"] else 0)
         + (4 if GRAPH_OBS_TOKEN["embed_opt"] else 0)
     )
+    SCOUT_NODE_EMBED_SIZE = GRAPH_OBS_TOKEN["embedding_size_scout"] + (
+        1
+        if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["scout_high_ground"]
+        else 0 + 4
+        if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["flanking"]
+        else 0
+    )
+    print("running set")
+
+
+@lru_cache(maxsize=None)
+def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
+    # list of (u, v, [directions]) for advantaged locations from u to v
+    high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
+
+    # create extra node embeddings to add to
+    extra_node_embeddings = torch.zeros(
+        [batch_size, pos_obs_size, SCOUT_NODE_EMBED_SIZE - 2]
+    )
+    for u, v, dirs in high_ground_points:
+        extra_node_embeddings[:, u, -1] = 1
+    return extra_node_embeddings
 
 
 def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
@@ -86,15 +117,42 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
     global SUPPRESS_WARNINGS
     pos_obs_size = map.get_graph_size()
     batch_size = len(obs)
-    """
-    node_embeddings = torch.zeros(batch_size, pos_obs_size, 2)
-    move_map = create_move_map(map.g_move)
-    for i in range(batch_size):
-        #get_loc()
-        #node_embeddings[i]
-        pass
-    """
     node_embeddings = obs.reshape([batch_size, pos_obs_size, 2])
+
+    # embed graph subproblem-esque optimization into node embeddings
+    if GRAPH_OBS_TOKEN["embed_opt"]:
+        if OPT_SETTINGS["scout_high_ground"]:
+            extra_node_embeddings = scout_get_high_ground_embeddings(
+                batch_size, pos_obs_size
+            )
+            node_embeddings = torch.cat(
+                [node_embeddings, extra_node_embeddings], dim=-1
+            )
+        if OPT_SETTINGS["flanking"]:
+            extra_node_embeddings_flanking = torch.zeros([batch_size, pos_obs_size, 4])
+            opts = []
+            for i in range(len(obs)):
+                x = obs[i]
+                red_position = get_loc(x, pos_obs_size)
+                blue_positions = set([])
+                for j in range(pos_obs_size):
+                    if x[pos_obs_size : 2 * pos_obs_size][j]:
+                        blue_positions.add(j)
+                map.g_acs = (
+                    map.g_move
+                )  # add these 2 to interface it with the old function
+                map.g_vis = map.g_view
+                opt = flank_optimization(
+                    map,
+                    red_position,
+                    blue_positions,
+                )
+                if opt != 0:
+                    extra_node_embeddings_flanking[i, red_position, opt - 1] = 1
+            node_embeddings = torch.cat(
+                [node_embeddings, extra_node_embeddings_flanking], dim=-1
+            )
+    print(node_embeddings.shape)
     return node_embeddings
 
 
@@ -125,20 +183,22 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
     global SUPPRESS_WARNINGS
     pos_obs_size = map.get_graph_size()
     batch_size = len(obs)
-    node_embeddings = torch.zeros(batch_size, pos_obs_size, NODE_EMBED_SIZE) # TODO changed +1 node for a dummy node that we'll use when needed
+    node_embeddings = torch.zeros(
+        batch_size, pos_obs_size, NODE_EMBED_SIZE
+    )  # TODO changed +1 node for a dummy node that we'll use when needed
     move_map = create_move_map(map.g_acs)
 
     # embed x,y
     if GRAPH_OBS_TOKEN["embed_pos"]:
-        pos_emb = torch.zeros(pos_obs_size+1, 2) # x,y coordinates
+        pos_emb = torch.zeros(pos_obs_size + 1, 2)  # x,y coordinates
         for i in range(pos_obs_size):
-            pos_emb[i,:] = torch.FloatTensor(map.n_info[i + 1])
+            pos_emb[i, :] = torch.FloatTensor(map.n_info[i + 1])
         # normalize x,y
-        min_x, min_y = torch.min(pos_emb[:,0]), torch.min(pos_emb[:,1])
-        pos_emb[:,0] -= min_x
-        pos_emb[:,1] -= min_y
+        min_x, min_y = torch.min(pos_emb[:, 0]), torch.min(pos_emb[:, 1])
+        pos_emb[:, 0] -= min_x
+        pos_emb[:, 1] -= min_y
         node_embeddings /= torch.max(pos_emb)
-        node_embeddings[:,:,-3:-1] += pos_emb
+        node_embeddings[:, :, -3:-1] += pos_emb
 
     # embed rest of features
     for i in range(batch_size):
@@ -146,31 +206,45 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
         if not obs_shapes:
             print("shapes not provided. returning")
             if not SUPPRESS_WARNINGS["embed"]:
-                print(ERROR_MSG("shapes not provided. skipping embed and suppressing this warning."))
+                print(
+                    ERROR_MSG(
+                        "shapes not provided. skipping embed and suppressing this warning."
+                    )
+                )
                 SUPPRESS_WARNINGS["embed_noshapes"] = True
         self_shape, blue_shape, red_shape, n_red, n_blue = obs_shapes
-        if self_shape < pos_obs_size or red_shape < pos_obs_size or blue_shape < pos_obs_size:
+        if (
+            self_shape < pos_obs_size
+            or red_shape < pos_obs_size
+            or blue_shape < pos_obs_size
+        ):
             if not SUPPRESS_WARNINGS["embed"]:
-                print(ERROR_MSG("test batch detected while embedding. skipping embed and suppressing this warning."))
+                print(
+                    ERROR_MSG(
+                        "test batch detected while embedding. skipping embed and suppressing this warning."
+                    )
+                )
                 SUPPRESS_WARNINGS["embed"] = True
             return
-        
+
         # get obs shapes and parse obs
         self_obs = obs[i][:self_shape]
-        blue_obs = obs[i][self_shape:(self_shape+blue_shape)]
-        red_obs = obs[i][(self_shape+blue_shape):(self_shape+blue_shape+red_shape)]
-        
+        blue_obs = obs[i][self_shape : (self_shape + blue_shape)]
+        red_obs = obs[i][
+            (self_shape + blue_shape) : (self_shape + blue_shape + red_shape)
+        ]
+
         # agent_is_here
         red_node = get_loc(self_obs, pos_obs_size)
         if red_node == -1:
             print(ERROR_MSG("agent not found"))
         node_embeddings[i][red_node][0] = 1
-        
+
         # num_red_here
         for j in range(pos_obs_size):
             if red_obs[j]:
                 node_embeddings[i][j][1] += 1
-        
+
         # num_blue_here
         blue_positions = set([])
         for j in range(pos_obs_size):
@@ -180,45 +254,52 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
 
         ## EXTRA EMBEDDINGS TO PROMOTE LEARNING ##
         # can_red_go_here_t
-        for possible_next in map.g_acs.adj[red_node+1]:
-            node_embeddings[i][possible_next-1][3] = 1
-        
+        for possible_next in map.g_acs.adj[red_node + 1]:
+            node_embeddings[i][possible_next - 1][3] = 1
+
         # can_blue_move_here_t
         if MOVE_DEGS["move_1deg_away"] == None:
             MOVE_DEGS["move_1deg_away"] = get_nodes_ndeg_away(map.g_acs.adj, 1)
         move_1deg_away = MOVE_DEGS["move_1deg_away"]
         for j in blue_positions:
-            for possible_next in move_1deg_away[j+1]:
-                node_embeddings[i][possible_next-1][4] = 1
-        
+            for possible_next in move_1deg_away[j + 1]:
+                node_embeddings[i][possible_next - 1][4] = 1
+
         # direction of blue agent
         if GRAPH_OBS_TOKEN["embed_dir"]:
             blue_i = 0
-            for blue_position in blue_positions: #HERE
-                start_idx_for_dir_i = len(blue_obs)-1-4*(blue_i+1)
-                end_idx_for_dir_i = len(blue_obs)-1-4*blue_i
+            for blue_position in blue_positions:  # HERE
+                start_idx_for_dir_i = len(blue_obs) - 1 - 4 * (blue_i + 1)
+                end_idx_for_dir_i = len(blue_obs) - 1 - 4 * blue_i
                 dir_i = blue_obs[start_idx_for_dir_i:end_idx_for_dir_i]
-                blue_dir = get_loc(dir_i, 4) + 1 # direction as defined by action_lookup.py
-                blue_dir_behind = action_lookup.TURN_L[action_lookup.TURN_L[blue_dir]] # 2 left turns = 180deg turn
-                blue_dir_behind_node_idx = move_map[blue_position+1][blue_dir_behind] - 1
+                blue_dir = (
+                    get_loc(dir_i, 4) + 1
+                )  # direction as defined by action_lookup.py
+                blue_dir_behind = action_lookup.TURN_L[
+                    action_lookup.TURN_L[blue_dir]
+                ]  # 2 left turns = 180deg turn
+                blue_dir_behind_node_idx = (
+                    move_map[blue_position + 1][blue_dir_behind] - 1
+                )
                 if blue_dir_behind_node_idx >= 0:
                     node_embeddings[i][blue_dir_behind_node_idx][5] = 1
                 blue_i += 1
 
         # add feature from some external "optimization", if desired
         if GRAPH_OBS_TOKEN["embed_opt"]:
-            if OPT_SETTINGS["flanking"]: # use the "flanking" optimization
+            if OPT_SETTINGS["flanking"]:  # use the "flanking" optimization
                 node_embeddings[i][red_node][6:10] = flank_optimization(
-                    map,
-                    red_node,
-                    blue_positions
+                    map, red_node, blue_positions
                 )
-            else: # no optimization given; defaulting to 0
+            else:  # no optimization given; defaulting to 0
                 if not SUPPRESS_WARNINGS["optimization_none"]:
-                    print(ERROR_MSG("external optimization not provided. embedding \
+                    print(
+                        ERROR_MSG(
+                            "external optimization not provided. embedding \
                         will contain an extra unused 0 and decrease efficiency. \
                         did you mean to set GRAPH_OBS_TOKEN.embed_opt = False?"
-                    ))
+                        )
+                    )
                     SUPPRESS_WARNINGS["optimization_none"] = True
 
     return node_embeddings.to(device)
@@ -233,12 +314,14 @@ def get_loc(one_hot_graph, graph_size, default=0, get_all=False):
         if one_hot_graph[i]:
             return i
     if not SUPPRESS_WARNINGS["decode"]:
-        print(f"test batch detected while decoding. agent not found. returning default={default} and suppressing this warning.")
+        print(
+            f"test batch detected while decoding. agent not found. returning default={default} and suppressing this warning."
+        )
         SUPPRESS_WARNINGS["decode"] = True
     return default
 
 
-def create_move_map(graph):#: Fig8MapInfo):
+def create_move_map(graph):  #: Fig8MapInfo):
     """
     turns map.g_acs into a dictionary in the form of:
     {
@@ -249,7 +332,9 @@ def create_move_map(graph):#: Fig8MapInfo):
         ...
     }
     """
-    move_map = {} # movement dictionary: d[node][direction] = newnode. newnode is -1 if direction is not possible from node
+    move_map = (
+        {}
+    )  # movement dictionary: d[node][direction] = newnode. newnode is -1 if direction is not possible from node
     for n in graph.adj:
         move_map[n] = {}
         ms = graph.adj[n]
@@ -257,7 +342,8 @@ def create_move_map(graph):#: Fig8MapInfo):
             dir = ms[m]["action"]
             move_map[n][dir] = m
         for movement in action_lookup.MOVE_LOOKUP:
-            if movement not in move_map[n]: move_map[n][movement] = -1
+            if movement not in move_map[n]:
+                move_map[n][movement] = -1
     return move_map
 
 
@@ -306,42 +392,48 @@ def load_edge_dictionary(map_edges):
     # create initial edge_array and TODO edge_to_action mappings
     edge_array = []
     for k, v in zip(map_edges.keys(), map_edges.values()):
-        edge_array += [[k-1, vi-1] for vi in v.keys()]
-    
+        edge_array += [[k - 1, vi - 1] for vi in v.keys()]
+
     # create edge_dictionary
     edge_dictionary = {}
     for edge in edge_array:
-        if edge[0] not in edge_dictionary: edge_dictionary[edge[0]] = set([])
+        if edge[0] not in edge_dictionary:
+            edge_dictionary[edge[0]] = set([])
         edge_dictionary[edge[0]].add(edge[1])
-    
+
     return edge_dictionary
 
 
 def get_cost_from_reward(reward):
-    return 1/(reward + 1e-3) # takes care of div by 0
+    return 1 / (reward + 1e-3)  # takes care of div by 0
 
 
 def get_probs_mask(agent_nodes, graph_size, edges_dict):
     node_exclude_list = np.array(list(range(graph_size)))
-    mask = [np.delete(node_exclude_list, list(edges_dict[agent_node])+[agent_node]) for agent_node in agent_nodes]
+    mask = [
+        np.delete(node_exclude_list, list(edges_dict[agent_node]) + [agent_node])
+        for agent_node in agent_nodes
+    ]
     return mask
 
 
 def count_model_params(model, print_model=False):
     num_params = sum(p.numel() for _, p in model.named_parameters() if p.requires_grad)
-    if print_model: summary(model)
+    if print_model:
+        summary(model)
     print(f"{type(model)} using {num_params} #params")
 
 
 def parse_config(model_config):
-    hiddens = list(model_config.get("fcnet_hiddens", [])) + \
-        list(model_config.get("post_fcnet_hiddens", []))
+    hiddens = list(model_config.get("fcnet_hiddens", [])) + list(
+        model_config.get("post_fcnet_hiddens", [])
+    )
     activation = model_config.get("fcnet_activation")
     if not model_config.get("fcnet_hiddens", []):
         activation = model_config.get("post_fcnet_activation")
     no_final_linear = model_config.get("no_final_linear")
-    vf_share_layers = model_config.get("vf_share_layers") # this is usually 0
-    free_log_std = model_config.get("free_log_std") # skip worrying about log std
+    vf_share_layers = model_config.get("vf_share_layers")  # this is usually 0
+    free_log_std = model_config.get("free_log_std")  # skip worrying about log std
     return hiddens, activation, no_final_linear, vf_share_layers, free_log_std
 
 
@@ -367,17 +459,20 @@ def create_value_branch(
                     in_size=prev_vf_layer_size,
                     out_size=size,
                     activation_fn=activation,
-                    initializer=normc_initializer(1.0)))
+                    initializer=normc_initializer(1.0),
+                )
+            )
             prev_vf_layer_size = size
         _value_branch_separate = torch.nn.Sequential(*vf_layers)
     # layer which outputs 1 value
-    #prev_layer_size = hiddens[-1] if self._value_branch_separate else self.map.get_graph_size()
+    # prev_layer_size = hiddens[-1] if self._value_branch_separate else self.map.get_graph_size()
     prev_layer_size = hiddens[-1] if _value_branch_separate else num_outputs
     _value_branch = SlimFC(
         in_size=prev_layer_size,
         out_size=1,
         initializer=normc_initializer(0.01),
-        activation_fn=None)
+        activation_fn=None,
+    )
     return _value_branch, _value_branch_separate
 
 
@@ -439,11 +534,7 @@ def create_policy_fc(
     return _hidden_layers, _logits
 
 
-def flank_optimization(
-    map: Fig8MapInfo,
-    red_location: int,
-    blue_locations: List[int]
-):
+def flank_optimization(map: Fig8MapInfo, red_location: int, blue_locations: List[int]):
     """
     :param map: MapInfo object with vis and move information
     :param red_location: 0-indexed location of red agent node
@@ -451,7 +542,7 @@ def flank_optimization(
     :return a direction that the agent has to go to get behind the enemy agent, 1-hot encoded
     """
     red_location += 1
-    blue_locations = [x+1 for x in blue_locations]
+    blue_locations = [x + 1 for x in blue_locations]
 
     """
     get information that is required for A* to run efficiently:
@@ -465,23 +556,23 @@ def flank_optimization(
         for m in ms:
             dir = ms[m]["action"]
             move_map[n][m] = dir
-    
+
     # build vis graph: node -> {engage_set} = {x in nodes | dist(x, node) < engage_range}
     vis_map = {}
     for node in map.g_vis.adj:
-        vis_map[node] = (
-            [
-                x for x in map.g_vis.adj[node] 
-                if map.g_vis.adj[node][x][0]["dist"] < env_setup.INTERACT_LOOKUP["engage_range"]
-            ]
-        )
-    
+        vis_map[node] = [
+            x
+            for x in map.g_vis.adj[node]
+            if map.g_vis.adj[node][x][0]["dist"]
+            < env_setup.INTERACT_LOOKUP["engage_range"]
+        ]
+
     # set of nodes visible by some blue agent
     blue_visible_nodes = set()
     for blue_location in blue_locations:
         for visible_location in vis_map[blue_location]:
             blue_visible_nodes.add(visible_location)
-    
+
     """
     run A* from each red agent to the closest node which can view blue agent while trying to minimize
     passing through nodes on which blue can engage. implement using priority queue sorting on H.
@@ -491,7 +582,7 @@ def flank_optimization(
     D == degree away from start
     A* heuristic: H(n) = |G|*V(n) + D(n)
     """
-    directions = { red_location: -1 } # node -> where we got to this node from
+    directions = {red_location: -1}  # node -> where we got to this node from
     nodes = [(0, 0, 0, red_location, -1)]
     visited = set([red_location])
     goal_node = -1
@@ -512,18 +603,16 @@ def flank_optimization(
         next_nodes = move_map[n]
         for next_node in next_nodes:
             if next_node not in visited:
-                is_visible_by_enemy = (
-                    1 if next_node in blue_visible_nodes else 0
-                )
+                is_visible_by_enemy = 1 if next_node in blue_visible_nodes else 0
                 next_V = V + is_visible_by_enemy
-                next_D = D+1
+                next_D = D + 1
                 nodes.append(
                     (
-                        map.g_acs.number_of_nodes()*next_V+next_D,
+                        map.g_acs.number_of_nodes() * next_V + next_D,
                         next_V,
                         next_D,
                         next_node,
-                        n
+                        n,
                     )
                 )
 
@@ -531,7 +620,7 @@ def flank_optimization(
     backtrack back from goal_node->red_location using directions map
     """
     if goal_node == -1:
-        return 0 # no direction if no nodes could be found from where we can see blue
+        return 0  # no direction if no nodes could be found from where we can see blue
     last_node = goal_node
     curr_node = goal_node
     while curr_node != red_location:
@@ -551,6 +640,8 @@ class LocalPooling(nn.Module):
             sys.exit()
         x = x[range(len(x)), agent_nodes, :]
         return x
+
+
 class GeneralGNNPooling(nn.Module):
     def __init__(
         self,
@@ -562,7 +653,7 @@ class GeneralGNNPooling(nn.Module):
         self.aggregator = None
         self.aggregator_name = aggregator_name
         if self.aggregator_name == "attention":
-            #self.aggregator = pool.SAGPooling(input_dim)
+            # self.aggregator = pool.SAGPooling(input_dim)
             self.aggregator = aggr.AttentionalAggregation(
                 gate_nn=nn.Sequential(
                     SlimFC(input_dim, input_dim),
@@ -579,14 +670,16 @@ class GeneralGNNPooling(nn.Module):
             self.aggregator2 = aggr.MeanAggregation()
             input_dim *= 2
         else:
-            raise NotImplementedError("aggregation_fn/aggregator_name is not one of the supported aggregations.")
+            raise NotImplementedError(
+                "aggregation_fn/aggregator_name is not one of the supported aggregations."
+            )
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.reducer = nn.Sequential(
             SlimFC(input_dim, input_dim, activation_fn="relu"),
             SlimFC(input_dim, output_dim, activation_fn="relu"),
         )
-    
+
     @override(nn.Module)
     def forward(self, x, edge_index, agent_nodes=None):
         if self.aggregator_name == "attention":
@@ -602,10 +695,15 @@ class GeneralGNNPooling(nn.Module):
             x = self.aggregator(x, edge_index, agent_nodes=agent_nodes)
         elif self.aggregator_name == "hybrid":
             x = torch.concat(
-                [self.aggregator1(x, edge_index, agent_nodes=agent_nodes), self.aggregator2(x).reshape([x.shape[0], -1])],
+                [
+                    self.aggregator1(x, edge_index, agent_nodes=agent_nodes),
+                    self.aggregator2(x).reshape([x.shape[0], -1]),
+                ],
                 dim=1,
             )
         else:
-            raise NotImplementedError("aggregation_fn/aggregator_name is not one of the supported aggregations.")
+            raise NotImplementedError(
+                "aggregation_fn/aggregator_name is not one of the supported aggregations."
+            )
         x = self.reducer(x)
         return x  # self.softmax(x)

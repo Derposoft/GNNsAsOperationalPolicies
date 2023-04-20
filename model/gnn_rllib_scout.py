@@ -53,14 +53,16 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self.num_blue = kwargs["nblue"]
         self.aggregation_fn = kwargs["aggregation_fn"]
         self.hidden_size = kwargs["hidden_size"]
-        self.is_hybrid = kwargs["is_hybrid"]  # is this a hybrid model or a gat-only model?
+        self.is_hybrid = kwargs[
+            "is_hybrid"
+        ]  # is this a hybrid model or a gat-only model?
         self.conv_type = kwargs["conv_type"]
         self.layernorm = kwargs["layernorm"]
         self.adjacency = []
         for n in map.g_move.adj:
             ms = map.g_move.adj[n]
             for m in ms:
-                self.adjacency.append([n-1, m-1])
+                self.adjacency.append([n - 1, m - 1])
         self.adjacency = torch.LongTensor(self.adjacency).t().contiguous()
         self._features = None  # current "base" output before logits
         self._last_flat_in = None  # last input
@@ -69,30 +71,36 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         """
         instantiate policy and value networks
         """
-        #self.GAT_LAYERS = 4
-        #self.N_HEADS = 1 if self.conv_type == "gcn" else 4
-        #self.HIDDEN_DIM = 4
-        self.GAT_LAYERS = 2 # 1_6:1804, 3_50: ~15k
+        # self.GAT_LAYERS = 4
+        # self.N_HEADS = 1 if self.conv_type == "gcn" else 4
+        # self.HIDDEN_DIM = 4
+        self.GAT_LAYERS = 2  # 1_6:1804, 3_50: ~15k
         self.N_HEADS = 1 if self.conv_type == "gcn" else 4
         self.HIDDEN_DIM = 2
 
-        self.hiddens = [self.hidden_size, self.hidden_size//2] # TODO withut //2
+        self.hiddens = [self.hidden_size, self.hidden_size // 2]  # TODO withut //2
         gat = GATv2Conv if self.conv_type == "gat" else GCNConv
-        self.gats = nn.ModuleList([
-            gat(
-                in_channels=utils.SCOUT_NODE_EMBED_SIZE if i == 0 else self.HIDDEN_DIM*self.N_HEADS,
-                out_channels=self.HIDDEN_DIM,
-                heads=self.N_HEADS,
-            )
-            for i in range(self.GAT_LAYERS)
-        ])
-        self.norms = nn.ModuleList([
-            BatchNorm(len(list(self.map.g_move.adj.keys())))
-            for _ in range(self.GAT_LAYERS)
-        ])
+        self.gats = nn.ModuleList(
+            [
+                gat(
+                    in_channels=utils.SCOUT_NODE_EMBED_SIZE
+                    if i == 0
+                    else self.HIDDEN_DIM * self.N_HEADS,
+                    out_channels=self.HIDDEN_DIM,
+                    heads=self.N_HEADS,
+                )
+                for i in range(self.GAT_LAYERS)
+            ]
+        )
+        self.norms = nn.ModuleList(
+            [
+                BatchNorm(len(list(self.map.g_move.adj.keys())))
+                for _ in range(self.GAT_LAYERS)
+            ]
+        )
         self.aggregator = utils.GeneralGNNPooling(
             aggregator_name=self.aggregation_fn,
-            input_dim=self.HIDDEN_DIM*self.N_HEADS,
+            input_dim=self.HIDDEN_DIM * self.N_HEADS,
             output_dim=self.action_space_output_dim,
         )
         if self.is_hybrid:
@@ -101,17 +109,20 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
                 activation=activation,
                 num_outputs=num_outputs,
                 no_final_linear=no_final_linear,
-                num_inputs=int(np.product(obs_space.shape)) +num_outputs,
+                num_inputs=int(np.product(obs_space.shape)) + num_outputs,
             )
         else:
-            self._hiddens, self._logits = None, utils.create_policy_fc(
-                hiddens=self.hiddens,
-                activation=activation,
-                num_outputs=num_outputs,
-                no_final_linear=no_final_linear,
-                num_inputs=int(np.product(obs_space.shape)) +num_outputs,
-            )[1]
-            
+            self._hiddens, self._logits = (
+                None,
+                utils.create_policy_fc(
+                    hiddens=self.hiddens,
+                    activation=activation,
+                    num_outputs=num_outputs,
+                    no_final_linear=no_final_linear,
+                    num_inputs=int(np.product(obs_space.shape)) + num_outputs,
+                )[1],
+            )
+
         self._value_branch, self._value_branch_separate = utils.create_value_branch(
             num_inputs=int(np.product(obs_space.shape)),
             num_outputs=num_outputs,
@@ -124,9 +135,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         produce debug output and ensure that model is on right device
         """
         utils.count_model_params(self, print_model=True)
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
 
     @override(TMv2.TorchModelV2)
@@ -144,7 +153,8 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         # inference
         for conv, norm in zip(self.gats, self.norms):
             x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0)
-            if self.layernorm: x = norm(x)
+            if self.layernorm:
+                x = norm(x)
         self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes)
         if self.is_hybrid:
             self._features = self._hiddens(torch.cat([self._features, obs], dim=1))
@@ -158,7 +168,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
     def value_function(self):
         assert self._features is not None, "must call forward() first"
         if not self._value_branch:
-            return torch.Tensor([0]*len(self._features))
+            return torch.Tensor([0] * len(self._features))
         if self._value_branch_separate:
             return self._value_branch(
                 self._value_branch_separate(self._last_flat_in)
