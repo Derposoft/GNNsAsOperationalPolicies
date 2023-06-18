@@ -47,11 +47,17 @@ NODE_EMBED_SIZE = (
     + (1 if GRAPH_OBS_TOKEN["embed_dir"] else 0)
     + (4 if GRAPH_OBS_TOKEN["embed_opt"] else 0)
 )
-SCOUT_NODE_EMBED_SIZE = 2
 OPT_SETTINGS = {
-    "flanking": True,  # does positioning on this node consistute "flanking" the enemy?
+    "flanking": False,  # does positioning on this node consistute "flanking" the enemy?
     "scout_high_ground": True,
+    "scout_high_ground_relevance": True,
 }
+SCOUT_NODE_EMBED_SIZE = (
+    2
+    + (4 if OPT_SETTINGS["flanking"] else 0)
+    + (1 if OPT_SETTINGS["scout_high_ground"] else 0)
+    + (1 if OPT_SETTINGS["scout_high_ground_relevance"] else 0)
+)
 
 
 def ERROR_MSG(e):
@@ -68,6 +74,7 @@ MOVE_DEGS = {
     "move_2deg_away": None,
     "move_3deg_away": None,
 }
+scout_map_info = None  # store it out here for lru_cache hashability reasons
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -85,14 +92,23 @@ def set_obs_token(OBS_TOKEN):
         + (4 if GRAPH_OBS_TOKEN["embed_opt"] else 0)
     )
     SCOUT_NODE_EMBED_SIZE = GRAPH_OBS_TOKEN["embedding_size_scout"] + (
-        (1 if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["scout_high_ground"] else 0)
-        + (4 if GRAPH_OBS_TOKEN["embed_opt"] and OPT_SETTINGS["flanking"] else 0)
+        (
+            (1 if OPT_SETTINGS["scout_high_ground"] else 0)
+            + (1 if OPT_SETTINGS["scout_high_ground_relevance"] else 0)
+            + (4 if OPT_SETTINGS["flanking"] else 0)
+        )
+        if GRAPH_OBS_TOKEN["embed_opt"]
+        else 0
     )
     print("running set")
 
 
 @lru_cache(maxsize=None)
 def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
+    """
+    :param batch_size: batch size of input to create embeddings for
+    :param pos_obs_size: observation size of positional one-hot encodings (n nodes in scout graph)
+    """
     # list of (u, v, [directions]) for advantaged locations from u to v
     high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
 
@@ -101,6 +117,52 @@ def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
     for u, v, dirs in high_ground_points:
         extra_node_embeddings[:, u, -1] = 1
     return extra_node_embeddings
+
+
+@lru_cache(maxsize=None)
+def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int]):
+    """
+    computes a simple relevance heuristic for certain waypoints based on how far away the nearest blue agent is.
+    :param blue_positions: frozenset of integers corresponding to the locations where the blue agents are
+    :returns: map from waypoint to relevance score
+    """
+
+    def relevance_score_from_dist(dist):
+        return min(1 / (dist + 1e-5), 1)  # clipping
+
+    relevances = {}
+    # list of (u, v, [directions]) for advantaged locations from u to v
+    high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
+    blue_locations = list(blue_positions)
+    for u, v, dirs in high_ground_points:
+        # perform a search from high ground point's advantage point pair to the closest blue
+        dist = flank_optimization_scout(
+            scout_map_info, v, blue_locations, compute_dist_only=True
+        )
+        relevances[u] = max(relevances.get(u, 0), relevance_score_from_dist(dist))
+    return relevances
+
+
+def scout_get_high_ground_embeddings_relevance(
+    node_embeddings: torch.Tensor,
+) -> torch.Tensor:
+    batch_size = node_embeddings.shape[0]
+    pos_obs_size = node_embeddings.shape[1]
+
+    # create extra node embeddings to add to
+    hg_relevance_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
+    for i in range(len(node_embeddings)):
+        x = node_embeddings[i]
+        blue_positions = set([])
+        for j in range(pos_obs_size):
+            if x[j, 1]:
+                blue_positions.add(j)
+        relevance_scores = scout_compute_relevance_heuristic_for_waypoint(
+            frozenset(blue_positions)
+        )
+        for u in relevance_scores:
+            hg_relevance_node_embeddings[i, u, 0] = 1
+    return hg_relevance_node_embeddings
 
 
 def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
@@ -112,16 +174,28 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
     global SUPPRESS_WARNINGS
     pos_obs_size = map.get_graph_size()
     batch_size = len(obs)
-    node_embeddings = obs.reshape([batch_size, pos_obs_size, 2])
+    node_embeddings = torch.stack(
+        [obs[:, :pos_obs_size], obs[:, pos_obs_size:]], dim=-1
+    )
+    # assert obs[0, pos_obs_size:].equal(node_embeddings[0, :, 1])  # sanity check to make sure reshape is working as expected. uncomment this if things are exploding.
+
+    # save some stuff globally for other functions
+    global scout_map_info
+    scout_map_info = map
 
     # embed graph subproblem-esque optimization into node embeddings
     if GRAPH_OBS_TOKEN["embed_opt"]:
         if OPT_SETTINGS["scout_high_ground"]:
-            extra_node_embeddings = scout_get_high_ground_embeddings(
+            hg_node_embeddings = scout_get_high_ground_embeddings(
                 batch_size, pos_obs_size
             )
+            node_embeddings = torch.cat([node_embeddings, hg_node_embeddings], dim=-1)
+        if OPT_SETTINGS["scout_high_ground_relevance"]:
+            hg_relevance_node_embeddings = scout_get_high_ground_embeddings_relevance(
+                node_embeddings
+            )
             node_embeddings = torch.cat(
-                [node_embeddings, extra_node_embeddings], dim=-1
+                [node_embeddings, hg_relevance_node_embeddings], dim=-1
             )
         if OPT_SETTINGS["flanking"]:
             extra_node_embeddings_flanking = torch.zeros([batch_size, pos_obs_size, 4])
@@ -525,19 +599,26 @@ def create_policy_fc(
 
 
 def flank_optimization_scout(
-    map: ScoutMapInfo, red_location: int, blue_locations: List[int]
+    map: ScoutMapInfo, red_location: int, blue_locations: List[int], **kwargs
 ):
     # add these 2 to interface it with the old function
     map.g_acs = map.g_move
     map.g_vis = map.g_view
-    return flank_optimization(map, red_location, blue_locations)
+    return flank_optimization(map, red_location, blue_locations, **kwargs)
 
 
-def flank_optimization(map: Fig8MapInfo, red_location: int, blue_locations: List[int]):
+def flank_optimization(
+    map: Fig8MapInfo,
+    red_location: int,
+    blue_locations: List[int],
+    compute_dist_only=False,
+    **kwargs,
+):
     """
     :param map: MapInfo object with vis and move information
     :param red_location: 0-indexed location of red agent node
     :param blue_locations: 0-indexed locations of blue agent nodes
+    :param compute_dist_only: whether or not to return a distance from red location to nearest blue location, ignoring any heuristic
     :return a direction that the agent has to go to get behind the enemy agent, 1-hot encoded
     """
     red_location += 1
@@ -594,16 +675,20 @@ def flank_optimization(map: Fig8MapInfo, red_location: int, blue_locations: List
         elif n != red_location:
             continue
         # check to see if our search is done
-        for blue_location in blue_locations:
-            if blue_location in vis_map[n]:
-                goal_node = n
-                break
+        if compute_dist_only:
+            if n in blue_locations:
+                return D
+        else:
+            for blue_location in blue_locations:
+                if blue_location in vis_map[n]:
+                    goal_node = n
+                    break
         # continue our search if not done
         next_nodes = move_map[n]
         for next_node in next_nodes:
             if next_node not in visited:
                 is_visible_by_enemy = 1 if next_node in blue_visible_nodes else 0
-                next_V = V + is_visible_by_enemy
+                next_V = (V + is_visible_by_enemy) if not compute_dist_only else 0
                 next_D = D + 1
                 nodes.append(
                     (
