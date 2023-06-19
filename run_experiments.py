@@ -36,7 +36,7 @@ for experiment_name in experiments:
         flags["name"] = experiment_name + f"_SEED{i+START_SEED}"
         experiment_cmds.append(
             "python3 train.py"
-            + "".join([f" --{flag}={flags[flag]}" for flag in flags])
+            + "".join([f" --{flag} {flags[flag]}" for flag in flags])
             + f" --seed {i+START_SEED}"
         )
 

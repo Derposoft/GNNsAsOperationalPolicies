@@ -39,7 +39,11 @@ GRAPH_OBS_TOKEN = {
     "obs_embed": True,
     "embed_pos": False,
     "embed_dir": True,
+    # different types of OPT subproblems to load
     "embed_opt": False,
+    "flanking": False,  # does positioning on this node consistute "flanking" the enemy?
+    "scout_high_ground": True,
+    "scout_high_ground_relevance": True,
 }
 NODE_EMBED_SIZE = (
     GRAPH_OBS_TOKEN["embedding_size"]
@@ -47,16 +51,11 @@ NODE_EMBED_SIZE = (
     + (1 if GRAPH_OBS_TOKEN["embed_dir"] else 0)
     + (4 if GRAPH_OBS_TOKEN["embed_opt"] else 0)
 )
-OPT_SETTINGS = {
-    "flanking": False,  # does positioning on this node consistute "flanking" the enemy?
-    "scout_high_ground": True,
-    "scout_high_ground_relevance": True,
-}
 SCOUT_NODE_EMBED_SIZE = (
     2
-    + (4 if OPT_SETTINGS["flanking"] else 0)
-    + (1 if OPT_SETTINGS["scout_high_ground"] else 0)
-    + (1 if OPT_SETTINGS["scout_high_ground_relevance"] else 0)
+    + (4 if GRAPH_OBS_TOKEN["flanking"] else 0)
+    + (1 if GRAPH_OBS_TOKEN["scout_high_ground"] else 0)
+    + (1 if GRAPH_OBS_TOKEN["scout_high_ground_relevance"] else 0)
 )
 
 
@@ -93,9 +92,9 @@ def set_obs_token(OBS_TOKEN):
     )
     SCOUT_NODE_EMBED_SIZE = GRAPH_OBS_TOKEN["embedding_size_scout"] + (
         (
-            (1 if OPT_SETTINGS["scout_high_ground"] else 0)
-            + (1 if OPT_SETTINGS["scout_high_ground_relevance"] else 0)
-            + (4 if OPT_SETTINGS["flanking"] else 0)
+            (1 if GRAPH_OBS_TOKEN["scout_high_ground"] else 0)
+            + (1 if GRAPH_OBS_TOKEN["scout_high_ground_relevance"] else 0)
+            + (4 if GRAPH_OBS_TOKEN["flanking"] else 0)
         )
         if GRAPH_OBS_TOKEN["embed_opt"]
         else 0
@@ -187,19 +186,19 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
 
     # embed graph subproblem-esque optimization into node embeddings
     if GRAPH_OBS_TOKEN["embed_opt"]:
-        if OPT_SETTINGS["scout_high_ground"]:
+        if GRAPH_OBS_TOKEN["scout_high_ground"]:
             hg_node_embeddings = scout_get_high_ground_embeddings(
                 batch_size, pos_obs_size
             )
             node_embeddings = torch.cat([node_embeddings, hg_node_embeddings], dim=-1)
-        if OPT_SETTINGS["scout_high_ground_relevance"]:
+        if GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
             hg_relevance_node_embeddings = scout_get_high_ground_embeddings_relevance(
                 node_embeddings
             )
             node_embeddings = torch.cat(
                 [node_embeddings, hg_relevance_node_embeddings], dim=-1
             )
-        if OPT_SETTINGS["flanking"]:
+        if GRAPH_OBS_TOKEN["flanking"]:
             extra_node_embeddings_flanking = torch.zeros([batch_size, pos_obs_size, 4])
             opts = []
             for i in range(len(obs)):
@@ -353,7 +352,7 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
 
         # add feature from some external "optimization", if desired
         if GRAPH_OBS_TOKEN["embed_opt"]:
-            if OPT_SETTINGS["flanking"]:  # use the "flanking" optimization
+            if GRAPH_OBS_TOKEN["flanking"]:  # use the "flanking" optimization
                 node_embeddings[i][red_node][6:10] = flank_optimization(
                     map, red_node, blue_positions
                 )

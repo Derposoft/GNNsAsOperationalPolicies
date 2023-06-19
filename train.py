@@ -34,7 +34,7 @@ from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print
 from ray.tune.logger import TBXLogger, TBXLoggerCallback
 
-ray.init(num_gpus=torch.cuda.device_count(), num_cpus=4, log_to_driver=False)  # 30
+ray.init(num_gpus=torch.cuda.device_count(), num_cpus=2, log_to_driver=False)  # 30
 SEED = 0
 
 
@@ -119,8 +119,12 @@ def create_trainer(config, trainer_type=None, custom_model=""):
 
     # create graph obs
     GRAPH_OBS_TOKEN = {
-        "embed_opt": config.embed_opt,
         "embed_dir": config.embed_dir,
+        # different types of OPT subproblems to load
+        "embed_opt": config.embed_opt,
+        "flanking": config.opt_flanking,  # does positioning on this node consistute "flanking" the enemy?
+        "scout_high_ground": config.opt_scout_high_ground,
+        "scout_high_ground_relevance": config.opt_scout_high_ground_relevance,
     }
 
     # set model defaults
@@ -151,7 +155,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         )
         .framework("torch")
         .training(lr=config.lr, model=model_config, train_batch_size=800)
-        .resources(num_gpus=torch.cuda.device_count())
+        .resources(num_gpus=torch.cuda.device_count(), num_cpus_per_worker=1)
         .rollouts(rollout_fragment_length=200)
         .evaluation(
             evaluation_interval=1,
@@ -365,9 +369,35 @@ def parse_arguments():
 
     # graph obs config
     parser.add_argument(
-        "--embed_opt", type=bool, default=False, help="embed graph optimization"
+        "--embed_opt",
+        action="store_true",
+        default=False,
+        help="embed graph optimization",
     )
-    parser.add_argument("--embed_dir", type=bool, default=True, help="embed agent dirs")
+    parser.add_argument(
+        "--embed_dir",
+        action="store_true",
+        default=False,
+        help="embed agent dirs",
+    )
+    parser.add_argument(
+        "--opt_flanking",
+        action="store_true",
+        default=False,
+        help="embed flanking subproblem",
+    )
+    parser.add_argument(
+        "--opt_scout_high_ground",
+        action="store_true",
+        default=False,
+        help="embed high ground subproblem",
+    )
+    parser.add_argument(
+        "--opt_scout_high_ground_relevance",
+        action="store_true",
+        default=False,
+        help="embed high ground relevance subproblem",
+    )
 
     # testing config
     parser.add_argument(

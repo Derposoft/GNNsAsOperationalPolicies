@@ -131,7 +131,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         state: List[TensorType],
         seq_lens: TensorType,
     ):
-        start_time = time.time()
+        # start_time = time.time()
         obs = input_dict["obs_flat"].float()
         # transform obs to graph
         attention_input = utils.scout_embed_obs_in_map(obs, self.map)
@@ -167,7 +167,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
         logits = self._logits(self._features)
-        print("forward takes", time.time() - start_time)
+        # print("forward takes", time.time() - start_time)
         return logits, state
 
     @override(TMv2.TorchModelV2)

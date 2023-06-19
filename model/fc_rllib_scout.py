@@ -72,10 +72,10 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self.free_log_std = model_config.get("free_log_std")
         num_inputs = (
             int(np.product(obs_space.shape))
-            + (4 if self.embed_opt and utils.OPT_SETTINGS["flanking"] else 0)
+            + (4 if self.embed_opt and utils.GRAPH_OBS_TOKEN["flanking"] else 0)
             + (
                 self.map.get_graph_size()
-                if self.embed_opt and utils.OPT_SETTINGS["scout_high_ground"]
+                if self.embed_opt and utils.GRAPH_OBS_TOKEN["scout_high_ground"]
                 else 0
             )
         )
@@ -115,7 +115,7 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         obs = input_dict["obs_flat"].float()
         if self.embed_opt:
             pos_obs_size = self.map.get_graph_size()
-            if utils.OPT_SETTINGS["flanking"]:
+            if utils.GRAPH_OBS_TOKEN["flanking"]:
                 opts = []
                 for x in obs:
                     blue_positions = set([])
@@ -133,7 +133,7 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
                     opts.append(opt_vector)
                 opts = torch.Tensor(opts)
                 obs = torch.cat([obs, opts], dim=-1)
-            if utils.OPT_SETTINGS["scout_high_ground"]:
+            if utils.GRAPH_OBS_TOKEN["scout_high_ground"]:
                 opts = utils.scout_get_high_ground_embeddings(
                     len(obs), pos_obs_size
                 ).reshape([len(obs), pos_obs_size])
