@@ -1,13 +1,16 @@
-from gym import spaces
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
-from ray.rllib.models.catalog import MODEL_DEFAULTS
+from ray.rllib.env.wrappers.multi_agent_env_compatibility import (
+    MultiAgentEnvCompatibility,
+)
+
+# from ray.rllib.models.catalog import MODEL_DEFAULTS
 
 # from ray.rllib.agents import dqn
-import numpy as np
-import os
-import time
+# import numpy as np
+# import os
+# import time
 
-import sys
+# import sys
 from .env_scout_mission_std import ScoutMissionStd
 
 # from . import default_setup as env_setup
@@ -30,6 +33,7 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
         self.action_space = self.action_space[0]
         self.observation_space = self.observation_space[0]
         self.done = set()
+        super(MultiAgentEnv, self).__init__()
 
     # return an arbitrary encoding from the "flat" action space to the normal action space 0-indexed
     def convert_discrete_action_to_multidiscrete(self, action):
@@ -38,13 +42,13 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
     def convert_multidiscrete_action_to_discrete(move_action, turn_action):
         return turn_action * len(local_action_move) + move_action
 
-    def reset(self):
+    def reset(self, *, seed: int = 0, options=None):
         """
         :returns: dictionary of agent_id -> reset observation
         """
         super().reset()
         self.done = set()
-        return self.states.dump_dict()[0]
+        return self.states.dump_dict()[0], {}
 
     def step(self, _n_actions: dict):
         n_actions = []
@@ -58,14 +62,16 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
         obs, rew, done = self.states.dump_dict(
             step=self.step_counter, provide_totals=True
         )
+        truncateds = {}
         all_done = True
         for k in done:
             if done[k]:
                 self.done.add(k)
             all_done = all_done and done[k]
         done["__all__"] = all_done
+        truncateds["__all__"] = all_done
 
         # make sure to only report done ids once
         for id in self.done:
             done.pop(id)
-        return obs, rew, done, {}
+        return obs, rew, done, truncateds, {}  # last 2 are "truncateds" and "infos"

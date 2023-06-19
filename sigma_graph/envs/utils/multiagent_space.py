@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 
 
 # a list of [action spaces]. support Discrete and MultiDiscrete
@@ -24,7 +24,7 @@ class ObservationSpaces(list):
 
     def shape(self):
         return [self._obs_space[_].shape for _ in range(self._n)]
-    
+
     def sample(self):
         return [obs_space.sample() for obs_space in self._obs_space]
 

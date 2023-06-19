@@ -7,7 +7,7 @@ rebuild one from scratch when one existed.
 
 import sys
 import numpy as np
-import gym
+import gymnasium as gym
 
 import ray.rllib.models.torch.torch_modelv2 as TMv2
 from ray.rllib.models.torch.misc import SlimFC, AppendBiasLayer, normc_initializer
@@ -23,7 +23,6 @@ from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
 import torch.nn as nn
 import torch
-import gym
 
 # our code imports
 # from sigma_graph.data.graph.skirmish_graph import MapInfo

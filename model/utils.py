@@ -100,7 +100,7 @@ def set_obs_token(OBS_TOKEN):
         if GRAPH_OBS_TOKEN["embed_opt"]
         else 0
     )
-    print("running set")
+    # print("running set") # sanity check to make sure that these settings are being set
 
 
 @lru_cache(maxsize=None)
@@ -128,6 +128,9 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
     """
 
     def relevance_score_from_dist(dist):
+        # print(dist)
+        # if min(1 / (dist + 1e-5), 1) != 1:
+        #    print(min(1 / (dist + 1e-5), 1))
         return min(1 / (dist + 1e-5), 1)  # clipping
 
     relevances = {}
@@ -136,6 +139,8 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
     blue_locations = list(blue_positions)
     for u, v, dirs in high_ground_points:
         # perform a search from high ground point's advantage point pair to the closest blue
+        # print(v)
+        # print(blue_locations)
         dist = flank_optimization_scout(
             scout_map_info, v, blue_locations, compute_dist_only=True
         )

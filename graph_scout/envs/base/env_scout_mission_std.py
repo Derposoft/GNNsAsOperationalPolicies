@@ -1,4 +1,5 @@
-import gym
+import gymnasium as gym
+import gymnasium.spaces as spaces
 import numpy as np
 from random import randrange, uniform
 
@@ -27,8 +28,6 @@ class ScoutMissionStd(gym.Env):
         self._init_agent_state()
 
         # 2 init Multi-branched action gym space & flattened observation gym space
-        from gym import spaces
-
         self.action_space = [spaces.MultiDiscrete(self.acts.shape())] * self.states.num
         self.observation_space = [
             spaces.Box(low=0.0, high=1.0, shape=(self.states.shape * 2,))

@@ -12,7 +12,7 @@ from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
 import torch.nn as nn
 import torch
-import gym
+import gymnasium as gym
 import dgl
 
 # our code imports
@@ -105,7 +105,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
             no_final_linear=no_final_linear,
             num_inputs=int(np.product(obs_space.shape)) + self.gats.num_actions,
         )
-        utils.count_model_params(self._hiddens)
+        # utils.count_model_params(self._hiddens)
         # value
         self._value_branch, self._value_branch_separate = utils.create_value_branch(
             num_inputs=int(np.product(obs_space.shape)),
@@ -118,7 +118,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self._features = None
         self._last_flat_in = None
 
-        utils.count_model_params(self, print_model=True)
+        # utils.count_model_params(self, print_model=True) # do we need these prints
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
         self.cache = {}  # minor speedup (~15%) of training

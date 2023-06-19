@@ -5,6 +5,9 @@ run `python train.py --help` for more information on how to start training a mod
 """
 
 # general
+import os
+
+os.environ["PYTHONWARNINGS"] = "ignore::DeprecationWarning"
 import argparse
 import pickle
 import torch
@@ -13,7 +16,6 @@ import time
 import tempfile
 import numpy as np
 import random
-import os
 
 # our code
 from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP, TURN_90_LOOKUP
@@ -34,7 +36,7 @@ from ray.rllib.algorithms import ppo, dqn, pg, a3c, impala
 # from ray.rllib.agents import impala # not currently used; single-threaded stuff only for now
 from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print
-from ray.tune.logger import UnifiedLogger
+from ray.tune.logger import TBXLogger
 
 ray.init(num_gpus=torch.cuda.device_count(), num_cpus=4)  # 30
 SEED = 0
@@ -42,10 +44,10 @@ SEED = 0
 
 # create env configuration
 def create_env_config(config):
-    n_episodes = config.n_episode
+    # n_episodes = config.n_episode
     # init_red and init_blue should have number of agents dictionary elements if you want to specify it
     # [!!] remember to update this dict if adding new args in parser
-    outer_configs = {
+    env_config = {
         # FIG8 PARAMETERS
         "env_path": config.env_path,
         # "max_step": config.max_step,
@@ -77,12 +79,12 @@ def create_env_config(config):
     ## i.e. init_red "pos": tuple(x, z) or "L"/"R" region of the map
     # "init_red": [{"pos": (11, 1), "dir": 1}, {"pos": None}, {"pos": "L", "dir": None}]
     if hasattr(config, "penalty_stay"):
-        outer_configs["penalty_stay"] = config.penalty_stay
+        env_config["penalty_stay"] = config.penalty_stay
     if hasattr(config, "threshold_blue"):
-        outer_configs["threshold_damage_2_blue"] = config.threshold_blue
+        env_config["threshold_damage_2_blue"] = config.threshold_blue
     if hasattr(config, "threshold_red"):
-        outer_configs["threshold_damage_2_red"] = config.threshold_red
-    return outer_configs, n_episodes
+        env_config["threshold_damage_2_red"] = config.threshold_red
+    return env_config  # , n_episodes
 
 
 # store tb logs in custom named dir
@@ -95,24 +97,23 @@ def custom_log_creator(log_name, custom_dir="~/ray_results"):
         if not os.path.exists(custom_path):
             os.makedirs(custom_path)
         logdir = tempfile.mkdtemp(prefix=log_name, dir=custom_path)
-        return UnifiedLogger(config, logdir, loggers=None)
+        return TBXLogger(config, logdir)
 
     return logger_creator
 
 
 # create trainer configuration
-def create_trainer_config(
-    outer_configs, inner_configs, trainer_type=None, custom_model=""
-):
+def create_trainer(config, trainer_type=None, custom_model=""):
     # check params
     trainer_types = [dqn, pg, a3c, ppo]
     assert trainer_type != None, f"trainer_type must be one of {trainer_types}"
 
     # initialize env and required config settings
     env = ScoutMissionStdRLLib if "scout" in custom_model else Figure8SquadRLLib
-    setup_env = env(outer_configs)
-    # obs_space = setup_env.observation_space
-    # act_space = setup_env.action_space
+    env_config = create_env_config(config)
+    setup_env = env(env_config)
+    obs_space = setup_env.observation_space
+    act_space = setup_env.action_space
     # policies = {}
     # for agent_id in setup_env.learning_agent:
     #    policies[str(agent_id)] = (None, obs_space, act_space, {})
@@ -122,8 +123,8 @@ def create_trainer_config(
 
     # create graph obs
     GRAPH_OBS_TOKEN = {
-        "embed_opt": inner_configs.embed_opt,
-        "embed_dir": inner_configs.embed_dir,
+        "embed_opt": config.embed_opt,
+        "embed_dir": config.embed_dir,
     }
 
     # set model defaults
@@ -132,43 +133,38 @@ def create_trainer_config(
         # Extra kwargs to be passed to your model"s c"tor.
         "custom_model_config": {
             "map": setup_env.map,
-            "nred": outer_configs["n_red"],
-            "nblue": outer_configs["n_blue"],
-            "aggregation_fn": inner_configs.aggregation_fn,
-            "hidden_size": inner_configs.hidden_size,
-            "is_hybrid": inner_configs.is_hybrid,
-            "conv_type": inner_configs.conv_type,
-            "layernorm": inner_configs.layernorm,
+            "nred": env_config["n_red"],
+            "nblue": env_config["n_blue"],
+            "aggregation_fn": config.aggregation_fn,
+            "hidden_size": config.hidden_size,
+            "is_hybrid": config.is_hybrid,
+            "conv_type": config.conv_type,
+            "layernorm": config.layernorm,
             "graph_obs_token": GRAPH_OBS_TOKEN,
         },
     }
-    init_trainer_config = {
-        "env": env,
-        "env_config": {**outer_configs},
-        # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
-        "num_gpus": torch.cuda.device_count(),  # int(os.environ.get("RLLIB_NUM_GPUS", "0")),
-        "model": CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS,
-        "num_workers": 1,  # parallelism
-        "framework": "torch",
-        "evaluation_interval": 1,
-        "evaluation_num_episodes": 10,
-        "evaluation_num_workers": 1,
-        "rollout_fragment_length": 200,  # 50 for a2c, 200 for everyone else?
-        "train_batch_size": 800,
-        "log_level": "ERROR",
-        "seed": SEED,
-    }
 
-    # initialize specific trainer type config
-    trainer_type_config = {}
-    trainer_type_config = trainer_type.DEFAULT_CONFIG.copy()
-    trainer_type_config.update(init_trainer_config)
-    # TODO tune lr with scheduler?
-    trainer_type_config["lr"] = inner_configs.lr  # 1e-3
-
-    # merge init config and trainer-specific config and return
-    trainer_config = {**init_trainer_config, **trainer_type_config}
-    return trainer_config
+    model_config = CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS
+    return (
+        ppo.PPOConfig()
+        .environment(
+            env=env,
+            env_config=env_config,
+            action_space=act_space,
+            observation_space=obs_space,
+        )
+        .framework("torch")
+        .training(lr=config.lr, model=model_config, train_batch_size=800)
+        .resources(num_gpus=torch.cuda.device_count())
+        .rollouts(rollout_fragment_length=200)
+        .evaluation(
+            evaluation_interval=1,
+            evaluation_duration_unit="episodes",
+            evaluation_num_workers=1,
+        )
+        .debugging(logger_creator=lambda x: custom_log_creator(config.name)(x))
+        .build()
+    )
 
 
 def train(trainer, model_name, train_time=200, checkpoint_models=True, config=None):
@@ -214,46 +210,17 @@ def run_baselines(
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
-    outer_configs, _ = create_env_config(config)
-    env_config = outer_configs
 
-    # train
-    env = ScoutMissionStdRLLib if "scout" in custom_model else Figure8SquadRLLib
-    ppo_config = create_trainer_config(
-        outer_configs, config, trainer_type=ppo, custom_model=custom_model
-    )
-    trainer = ppo.PPOConfig().environment(env=env, env_config=env_config)
-    trainer.rollout_fragment_length = 100
-    trainer = (
-        trainer.framework("torch").training(
-            lr=config.lr,
-            model=ppo_config["model"],
-            train_batch_size=200,
-            sgd_minibatch_size=128,
-        )
-        # .exploration(exploration_config={"type": "StochasticSampling"})
-        .build(env, logger_creator=custom_log_creator(config.name))
-    )
-    train(trainer, config.name, train_time, checkpoint_models, ppo_config)
+    trainer = create_trainer(config, trainer_type=ppo, custom_model=custom_model)
+    train(trainer, config.name, train_time, checkpoint_models, None)
 
 
 # parse arguments
 def parse_arguments():
     """
-    feel free to add more parser args [!!] keep in mind to update the "outer_configs" if new args been added here
-    All other valid config arguments including {
-        _graph_args = {"map_id": "S", "load_pickle": True}
-        _config_args = ["damage_maximum", "damage_threshold_red", "damage_threshold_blue"]
-        INTERACT_LOOKUP = {
-            "sight_range": -1,  # -1 for unlimited range
-            "engage_range": 25,
-            "engage_behavior": {"damage": 1, "probability": 1.0},
-        }
-        INIT_LOGS = {
-            "log_on": False, "log_path": "logs/", "log_prefix": "log_", "log_overview": "reward_episodes.txt",
-            "log_verbose": False, "log_plot": False, "log_save": True,
-        }
-    }
+    Parses cli arguments. These arguments are used in create_env_config to create env arguments, and again in
+    create_trainer to create the trainer and model, so if any arguments here should be passed to the model/trainer/environment
+    artifacts, those functions must also be updated.
     """
     parser = argparse.ArgumentParser()
     # configs for sigma_graph env
@@ -411,15 +378,17 @@ def parse_arguments():
         help="use hardcoded policy from provided policy file",
     )
 
-    return parser
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
     # parse args
-    parser = parse_arguments()
-    config = parser.parse_args()
+    config = parse_arguments()
     SEED = config.seed
     # run models
     run_baselines(
-        config, custom_model=config.model + "_policy", train_time=config.train_time
+        config,
+        custom_model=config.model + "_policy",
+        train_time=config.train_time,
+        checkpoint_models=False,
     )

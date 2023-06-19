@@ -6,7 +6,7 @@ import torch
 import ray.rllib.models.torch.torch_modelv2 as TMv2
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
-import gym
+import gymnasium as gym
 from torch_geometric.nn.conv import GATv2Conv, GCNConv
 from torch_geometric.nn.norm import BatchNorm
 import numpy as np

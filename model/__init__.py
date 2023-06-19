@@ -1,5 +1,7 @@
 from ray.rllib.models.catalog import ModelCatalog
+
 from model.gnn_rllib import GNNPolicy
+
 from model.gnn_rllib_scout import GNNScoutPolicy
 from model.graph_transformer_rllib import GraphTransformerPolicy
 from model.hybrid_rllib import HybridPolicy
@@ -22,5 +24,5 @@ ModelCatalog.register_custom_model("fc_scout_policy", FCScoutPolicy)
 """
 not under development: "attention learn to route"-based model
 """
-#from model.altr_rllib import AltrPolicy
-#ModelCatalog.register_custom_model("altr_policy", AltrPolicy)
+# from model.altr_rllib import AltrPolicy
+# ModelCatalog.register_custom_model("altr_policy", AltrPolicy)
