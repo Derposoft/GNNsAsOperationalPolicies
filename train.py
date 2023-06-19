@@ -5,10 +5,12 @@ run `python train.py --help` for more information on how to start training a mod
 """
 
 # general
-import os
+import warnings
 
-os.environ["PYTHONWARNINGS"] = "ignore::DeprecationWarning"
+warnings.filterwarnings("ignore", module="dgl")
+
 import argparse
+import os
 import pickle
 import torch
 import ray
@@ -27,18 +29,12 @@ import model  # THIS NEEDS TO BE HERE IN ORDER TO RUN __init__.py!
 import model.utils as utils
 
 # algorithms to test
-# from ray.rllib.agents import dqn
 from ray.rllib.algorithms import ppo, dqn, pg, a3c, impala
-
-# from ray.rllib.agents import ppo, dqn, pg, a3c, impala
-# from ray.rllib.agents import a3c
-# from ray.rllib.agents import ppo
-# from ray.rllib.agents import impala # not currently used; single-threaded stuff only for now
 from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print
-from ray.tune.logger import TBXLogger
+from ray.tune.logger import TBXLogger, TBXLoggerCallback
 
-ray.init(num_gpus=torch.cuda.device_count(), num_cpus=4)  # 30
+ray.init(num_gpus=torch.cuda.device_count(), num_cpus=4, log_to_driver=False)  # 30
 SEED = 0
 
 
@@ -162,7 +158,10 @@ def create_trainer(config, trainer_type=None, custom_model=""):
             evaluation_duration_unit="episodes",
             evaluation_num_workers=1,
         )
-        .debugging(logger_creator=lambda x: custom_log_creator(config.name)(x))
+        .debugging(
+            logger_creator=lambda x: custom_log_creator(config.name)(x),
+            log_level="ERROR",
+        )
         .build()
     )
 

@@ -128,9 +128,6 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
     """
 
     def relevance_score_from_dist(dist):
-        # print(dist)
-        # if min(1 / (dist + 1e-5), 1) != 1:
-        #    print(min(1 / (dist + 1e-5), 1))
         return min(1 / (dist + 1e-5), 1)  # clipping
 
     relevances = {}
@@ -160,7 +157,7 @@ def scout_get_high_ground_embeddings_relevance(
         x = node_embeddings[i]
         blue_positions = set([])
         for j in range(pos_obs_size):
-            if x[j, 1]:
+            if x[j, 1] == 1:
                 blue_positions.add(j)
         relevance_scores = scout_compute_relevance_heuristic_for_waypoint(
             frozenset(blue_positions)

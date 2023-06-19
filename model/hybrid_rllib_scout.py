@@ -10,6 +10,7 @@ import ray.rllib.models.torch.torch_modelv2 as TMv2
 from ray.rllib.models.torch.misc import SlimFC, normc_initializer
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
+import time
 import torch.nn as nn
 import torch
 import gymnasium as gym
@@ -118,7 +119,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self._features = None
         self._last_flat_in = None
 
-        # utils.count_model_params(self, print_model=True) # do we need these prints
+        utils.count_model_params(self)  # , print_model=True) # do we need these prints
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
         self.cache = {}  # minor speedup (~15%) of training
@@ -130,7 +131,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         state: List[TensorType],
         seq_lens: TensorType,
     ):
-        # start_time = time.time()
+        start_time = time.time()
         obs = input_dict["obs_flat"].float()
         # transform obs to graph
         attention_input = utils.scout_embed_obs_in_map(obs, self.map)
@@ -146,7 +147,6 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         else:
             batch_graphs = self.cache[len(obs)].clone()
         batch_graphs.ndata["feat"] = attention_input.reshape(
-            # [-1, utils.NODE_EMBED_SIZE]
             [-1, utils.SCOUT_NODE_EMBED_SIZE]
         )
 
@@ -167,7 +167,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
         logits = self._logits(self._features)
-        # print("forward takes", time.time()-start_time)
+        print("forward takes", time.time() - start_time)
         return logits, state
 
     @override(TMv2.TorchModelV2)

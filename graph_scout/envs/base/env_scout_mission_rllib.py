@@ -30,6 +30,12 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
         super().__init__(**config)
 
         # extra values to make graph embedding viable
+        if not hasattr(self, "_agent_ids"):
+            self._agent_ids = self.states.dump_dict()[0].keys()
+        if not hasattr(self, "_obs_space_in_preferred_format"):
+            self._obs_space_in_preferred_format = None
+        if not hasattr(self, "_action_space_in_preferred_format"):
+            self._action_space_in_preferred_format = None
         self.action_space = self.action_space[0]
         self.observation_space = self.observation_space[0]
         self.done = set()
