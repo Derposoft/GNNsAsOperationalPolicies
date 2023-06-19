@@ -5,7 +5,9 @@
         "model": "gnn_scout",
         "hidden_size": 200,
         "conv_type": "gcn",
-        "embed_opt": true
+        "embed_opt": true,
+        "opt_scout_high_ground": "",
+        "opt_scout_high_ground_relevance": ""
     },
     "gatscout_200h2.2l_2r2b_OPT": {
         "n_red": 2,
@@ -13,13 +15,17 @@
         "model": "gnn_scout",
         "hidden_size": 200,
         "conv_type": "gat",
-        "embed_opt": true
+        "embed_opt": true,
+        "opt_scout_high_ground": "",
+        "opt_scout_high_ground_relevance": ""
     },
     "fcscout_200h2.2l_2r2b_OPT": {
         "n_red": 2,
         "n_blue": 2,
         "model": "fc_scout",
         "hidden_size": 205,
-        "embed_opt": true
+        "embed_opt": true,
+        "opt_scout_high_ground": "",
+        "opt_scout_high_ground_relevance": ""
     }
 }

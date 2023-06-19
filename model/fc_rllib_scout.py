@@ -70,15 +70,18 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         no_final_linear = model_config.get("no_final_linear")
         self.vf_share_layers = model_config.get("vf_share_layers")
         self.free_log_std = model_config.get("free_log_std")
-        num_inputs = (
-            int(np.product(obs_space.shape))
-            + (4 if self.embed_opt and utils.GRAPH_OBS_TOKEN["flanking"] else 0)
-            + (
-                self.map.get_graph_size()
-                if self.embed_opt and utils.GRAPH_OBS_TOKEN["scout_high_ground"]
-                else 0
+        num_inputs = int(np.product(obs_space.shape))
+        if self.embed_opt:
+            map_size = self.map.get_graph_size()
+            num_inputs += (
+                (4 if utils.GRAPH_OBS_TOKEN["flanking"] else 0)
+                + (map_size if utils.GRAPH_OBS_TOKEN["scout_high_ground"] else 0)
+                + (
+                    map_size
+                    if utils.GRAPH_OBS_TOKEN["scout_high_ground_relevance"]
+                    else 0
+                )
             )
-        )
 
         # policy
         self._logits = None
@@ -113,6 +116,7 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         seq_lens: TensorType,
     ):
         obs = input_dict["obs_flat"].float()
+        x = input_dict["obs_flat"].float()
         if self.embed_opt:
             pos_obs_size = self.map.get_graph_size()
             if utils.GRAPH_OBS_TOKEN["flanking"]:
@@ -131,13 +135,21 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
                     if opt != 0:
                         opt_vector[opt - 1] = 1
                     opts.append(opt_vector)
-                opts = torch.Tensor(opts)
-                obs = torch.cat([obs, opts], dim=-1)
+                opt_flanking = torch.Tensor(opts)
+                x = torch.cat([x, opts], dim=-1)
             if utils.GRAPH_OBS_TOKEN["scout_high_ground"]:
-                opts = utils.scout_get_high_ground_embeddings(
+                opt_high_ground = utils.scout_get_high_ground_embeddings(
                     len(obs), pos_obs_size
                 ).reshape([len(obs), pos_obs_size])
-                obs = torch.cat([obs, opts], dim=-1)
+                x = torch.cat([x, opt_high_ground], dim=-1)
+            if utils.GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
+                opt_high_ground_relevance = (
+                    utils.scout_get_high_ground_embeddings_relevance(
+                        obs, self.map
+                    ).reshape([len(obs), pos_obs_size])
+                )
+            x = torch.cat([x, opt_high_ground_relevance], dim=-1)
+        obs = x
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
         self._features = self._hidden_layers(self._last_flat_in)
         logits = self._logits(self._features) if self._logits else self._features

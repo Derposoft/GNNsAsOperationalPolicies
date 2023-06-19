@@ -145,18 +145,21 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
 
 
 def scout_get_high_ground_embeddings_relevance(
-    node_embeddings: torch.Tensor,
+    obs: torch.Tensor, model_map: ScoutMapInfo = None
 ) -> torch.Tensor:
-    batch_size = node_embeddings.shape[0]
-    pos_obs_size = node_embeddings.shape[1]
+    global scout_map_info
+    if not scout_map_info:
+        scout_map_info = model_map
+    batch_size = obs.shape[0]
+    pos_obs_size = obs.shape[1] // 2
 
     # create extra node embeddings to add to
     hg_relevance_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
-    for i in range(len(node_embeddings)):
-        x = node_embeddings[i]
+    for i in range(len(obs)):
+        x = obs[i]
         blue_positions = set([])
         for j in range(pos_obs_size):
-            if x[j, 1] == 1:
+            if x[pos_obs_size : 2 * pos_obs_size][j] == 1:
                 blue_positions.add(j)
         relevance_scores = scout_compute_relevance_heuristic_for_waypoint(
             frozenset(blue_positions)
@@ -193,14 +196,13 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
             node_embeddings = torch.cat([node_embeddings, hg_node_embeddings], dim=-1)
         if GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
             hg_relevance_node_embeddings = scout_get_high_ground_embeddings_relevance(
-                node_embeddings
+                obs
             )
             node_embeddings = torch.cat(
                 [node_embeddings, hg_relevance_node_embeddings], dim=-1
             )
         if GRAPH_OBS_TOKEN["flanking"]:
             extra_node_embeddings_flanking = torch.zeros([batch_size, pos_obs_size, 4])
-            opts = []
             for i in range(len(obs)):
                 x = obs[i]
                 red_position = get_loc(x, pos_obs_size)
@@ -218,6 +220,7 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
             node_embeddings = torch.cat(
                 [node_embeddings, extra_node_embeddings_flanking], dim=-1
             )
+    assert node_embeddings.shape[-1] == SCOUT_NODE_EMBED_SIZE  # sanity check
     return node_embeddings
 
 

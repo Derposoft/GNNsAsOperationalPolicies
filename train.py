@@ -34,7 +34,8 @@ from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print
 from ray.tune.logger import TBXLogger, TBXLoggerCallback
 
-ray.init(num_gpus=torch.cuda.device_count(), num_cpus=2, log_to_driver=False)  # 30
+ray.init(num_gpus=0, num_cpus=4, log_to_driver=False)  # 30
+# ray.init(num_gpus=0, num_cpus=1, log_to_driver=False)  # 30
 SEED = 0
 
 

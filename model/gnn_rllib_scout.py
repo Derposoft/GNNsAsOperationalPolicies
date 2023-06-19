@@ -10,6 +10,7 @@ import gymnasium as gym
 from torch_geometric.nn.conv import GATv2Conv, GCNConv
 from torch_geometric.nn.norm import BatchNorm
 import numpy as np
+import time
 
 from graph_scout.envs.data.terrain_graph import MapInfo
 from graph_scout.envs.utils.config import default_configs as env_setup
@@ -25,7 +26,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         model_config: ModelConfigDict,
         name: str,
         map: MapInfo,
-        **kwargs
+        **kwargs,
     ):
         TMv2.TorchModelV2.__init__(
             self,
@@ -145,6 +146,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         state: List[TensorType],
         seq_lens: TensorType,
     ):
+        # start = time.time()
         # transform obs to graph (for pyG, also do list[data]->torch_geometric.Batch)
         obs = input_dict["obs_flat"].float()
         x = utils.scout_embed_obs_in_map(obs, self.map)
@@ -162,6 +164,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
 
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
+        # print(f"forward: {time.time() - start}")
         return logits, state
 
     @override(TMv2.TorchModelV2)
