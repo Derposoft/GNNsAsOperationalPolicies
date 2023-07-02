@@ -49,6 +49,7 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         )
         nn.Module.__init__(self)
 
+        utils.set_obs_token(kwargs["graph_obs_token"])
         self.embed_opt = kwargs["graph_obs_token"]["embed_opt"]
         self.map = map
         self.hidden_size = kwargs["hidden_size"]
@@ -140,19 +141,20 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
                     opts.append(opt_vector)
                 opt_flanking = torch.Tensor(opts)
                 x = torch.cat([x, opts], dim=-1)
+                utils.timeit("embed flanking subproblem")
             if utils.GRAPH_OBS_TOKEN["scout_high_ground"]:
                 opt_high_ground = utils.scout_get_high_ground_embeddings(
                     len(obs), pos_obs_size
                 ).reshape([len(obs), pos_obs_size])
                 x = torch.cat([x, opt_high_ground], dim=-1)
-                utils.timeit("embed HG opt")
+                utils.timeit("embed HighGround subproblem")
             if utils.GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
                 opt_high_ground_relevance = (
                     utils.scout_get_high_ground_embeddings_relevance(
                         obs, self.map
                     ).reshape([len(obs), pos_obs_size])
                 )
-                utils.timeit("embed HGR opt")
+                utils.timeit("embed HighGroundRelevance subproblem")
             x = torch.cat([x, opt_high_ground_relevance], dim=-1)
 
         obs = x

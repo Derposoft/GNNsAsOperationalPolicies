@@ -7,14 +7,11 @@ run `python train.py --help` for more information on how to start training a mod
 # general
 import warnings
 
-warnings.filterwarnings("ignore", module="dgl")
-
 import argparse
 import os
 import pickle
 import torch
 import ray
-import time
 import tempfile
 import numpy as np
 import random
@@ -34,8 +31,8 @@ from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print
 from ray.tune.logger import TBXLogger, TBXLoggerCallback
 
-ray.init(num_gpus=0, num_cpus=4, log_to_driver=False)  # 30
-# ray.init(num_gpus=0, num_cpus=1, log_to_driver=False)  # 30
+warnings.filterwarnings("ignore", module="dgl")
+ray.init(num_gpus=0, num_cpus=4, log_to_driver=False)  # test 1 cpu and 30 cpus
 SEED = 0
 
 

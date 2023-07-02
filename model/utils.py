@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import heapq
 from torchinfo import summary
+import ray
 from ray.rllib.utils.annotations import override
 from ray.rllib.models.torch.misc import SlimFC, normc_initializer
 import time
@@ -147,10 +148,19 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
     return relevances
 
 
+@lru_cache(maxsize=None)
+def get_blue_positions(x: torch.Tensor):
+    blue_positions = (x == 1).nonzero()
+    if len(blue_positions) == 0:
+        return []
+    return (x == 1).nonzero()[0].numpy()
+
+
 hgr_embeddings_base = None
 
 
-# @lru_cache(maxsize=None)
+# 1.6s with no cache, ~160-180ms with compute_relevance_heuristics cache, ~20ms with optimized get_blue_positions
+@lru_cache(maxsize=None)
 def scout_get_high_ground_embeddings_relevance(
     obs: torch.Tensor, model_map: ScoutMapInfo = None
 ) -> torch.Tensor:
@@ -167,17 +177,17 @@ def scout_get_high_ground_embeddings_relevance(
         hgr_embeddings_base = hg_relevance_node_embeddings
     else:
         hg_relevance_node_embeddings = hgr_embeddings_base
+    # timeit("creating embeddings")
+
     for i in range(len(obs)):
         x = obs[i]
-        blue_positions = set([])
-        for j in range(pos_obs_size):
-            if x[pos_obs_size : 2 * pos_obs_size][j] == 1:
-                blue_positions.add(j)
+        blue_positions = get_blue_positions(x[pos_obs_size : 2 * pos_obs_size])
         relevance_scores = scout_compute_relevance_heuristic_for_waypoint(
             frozenset(blue_positions)
         )
         for u in relevance_scores:
             hg_relevance_node_embeddings[i, u, 0] = 1
+    # timeit("updating embeddings")
     return hg_relevance_node_embeddings
 
 
