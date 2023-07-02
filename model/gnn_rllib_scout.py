@@ -9,6 +9,7 @@ from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
 import gymnasium as gym
 from torch_geometric.nn.conv import GATv2Conv, GCNConv
 from torch_geometric.nn.norm import BatchNorm
+from torch_geometric.data import Batch, Data as GraphData
 import numpy as np
 import time
 
@@ -80,10 +81,10 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self.HIDDEN_DIM = 2
 
         self.hiddens = [self.hidden_size, self.hidden_size // 2]  # TODO withut //2
-        gat = GATv2Conv if self.conv_type == "gat" else GCNConv
+        gnn = GATv2Conv if self.conv_type == "gat" else GCNConv
         self.gats = nn.ModuleList(
             [
-                gat(
+                gnn(
                     in_channels=utils.SCOUT_NODE_EMBED_SIZE
                     if i == 0
                     else self.HIDDEN_DIM * self.N_HEADS,
@@ -146,25 +147,50 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         state: List[TensorType],
         seq_lens: TensorType,
     ):
-        # start = time.time()
+        utils.timeit("start")
+
         # transform obs to graph (for pyG, also do list[data]->torch_geometric.Batch)
         obs = input_dict["obs_flat"].float()
+        utils.timeit("obs to float")
+
         x = utils.scout_embed_obs_in_map(obs, self.map)
+        batch_size = x.shape[0]
+        graph_size = x.shape[1]
+        utils.timeit("scout embed obs")
+
         agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
+        utils.timeit("get agent nodes")
 
         # inference
+        if self.conv_type == "gat":
+            graph = Batch.from_data_list([GraphData(_x, self.adjacency) for _x in x])
+            x, batch_adjacency = graph.x, graph.edge_index
+            utils.timeit("batching")
+
         for conv, norm in zip(self.gats, self.norms):
-            x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0)
+            if self.conv_type == "gcn":
+                x = conv(x, self.adjacency)
+            else:
+                x = conv(x, batch_adjacency)  # batching=8.9ms, convs=26.3ms
+                # x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0) # 180-190ms
             if self.layernorm:
                 x = norm(x)
+        utils.timeit("gnn convs")
+
+        x = x.reshape([batch_size, graph_size, -1])
         self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes)
+        utils.timeit("convs")
+
         if self.is_hybrid:
             self._features = self._hiddens(torch.cat([self._features, obs], dim=1))
+            utils.timeit("hybrid section")
+
         logits = self._logits(self._features)
+        utils.timeit("get logsits")
 
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
-        # print(f"forward: {time.time() - start}")
+        utils.timeit("reshape")
         return logits, state
 
     @override(TMv2.TorchModelV2)

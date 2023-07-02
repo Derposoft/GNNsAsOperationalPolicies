@@ -115,8 +115,11 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         state: List[TensorType],
         seq_lens: TensorType,
     ):
+        utils.timeit("start")
         obs = input_dict["obs_flat"].float()
         x = input_dict["obs_flat"].float()
+        utils.timeit("get obs flat")
+
         if self.embed_opt:
             pos_obs_size = self.map.get_graph_size()
             if utils.GRAPH_OBS_TOKEN["flanking"]:
@@ -142,17 +145,22 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
                     len(obs), pos_obs_size
                 ).reshape([len(obs), pos_obs_size])
                 x = torch.cat([x, opt_high_ground], dim=-1)
+                utils.timeit("embed HG opt")
             if utils.GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
                 opt_high_ground_relevance = (
                     utils.scout_get_high_ground_embeddings_relevance(
                         obs, self.map
                     ).reshape([len(obs), pos_obs_size])
                 )
+                utils.timeit("embed HGR opt")
             x = torch.cat([x, opt_high_ground_relevance], dim=-1)
+
         obs = x
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
         self._features = self._hidden_layers(self._last_flat_in)
         logits = self._logits(self._features) if self._logits else self._features
+        utils.timeit("hiddens and logits")
+
         return logits, state
 
     @override(TMv2.TorchModelV2)

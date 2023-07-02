@@ -126,6 +126,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         "flanking": config.opt_flanking,  # does positioning on this node consistute "flanking" the enemy?
         "scout_high_ground": config.opt_scout_high_ground,
         "scout_high_ground_relevance": config.opt_scout_high_ground_relevance,
+        "verbose": config.log_on,
     }
 
     # set model defaults
@@ -415,6 +416,7 @@ if __name__ == "__main__":
     # parse args
     config = parse_arguments()
     SEED = config.seed
+
     # run models
     run_baselines(
         config,

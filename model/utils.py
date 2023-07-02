@@ -13,6 +13,7 @@ import torch_geometric.nn.aggr as aggr
 import torch_geometric.nn.pool as pool
 from typing import List
 from functools import lru_cache
+import os
 
 from graph_scout.envs.data.terrain_graph import MapInfo as ScoutMapInfo
 from graph_scout.envs.utils.config import default_configs as scout_config
@@ -99,6 +100,8 @@ def set_obs_token(OBS_TOKEN):
         if GRAPH_OBS_TOKEN["embed_opt"]
         else 0
     )
+    global verbose
+    verbose = OBS_TOKEN["verbose"]
     # print("running set") # sanity check to make sure that these settings are being set
 
 
@@ -144,6 +147,10 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
     return relevances
 
 
+hgr_embeddings_base = None
+
+
+# @lru_cache(maxsize=None)
 def scout_get_high_ground_embeddings_relevance(
     obs: torch.Tensor, model_map: ScoutMapInfo = None
 ) -> torch.Tensor:
@@ -154,7 +161,12 @@ def scout_get_high_ground_embeddings_relevance(
     pos_obs_size = obs.shape[1] // 2
 
     # create extra node embeddings to add to
-    hg_relevance_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
+    global hgr_embeddings_base
+    if hgr_embeddings_base == None or hgr_embeddings_base.shape[0] != batch_size:
+        hg_relevance_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
+        hgr_embeddings_base = hg_relevance_node_embeddings
+    else:
+        hg_relevance_node_embeddings = hgr_embeddings_base
     for i in range(len(obs)):
         x = obs[i]
         blue_positions = set([])
@@ -795,3 +807,14 @@ class GeneralGNNPooling(nn.Module):
             )
         x = self.reducer(x)
         return x  # self.softmax(x)
+
+
+prev_time = time.time()
+verbose = os.environ.get("verbose", False)
+
+
+def timeit(msg: str):
+    if verbose:
+        global prev_time
+        print(f"{time.time()-prev_time:2.4f} {msg}")
+        prev_time = time.time()
