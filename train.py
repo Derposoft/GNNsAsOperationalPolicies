@@ -32,7 +32,7 @@ from ray.tune.logger import pretty_print
 from ray.tune.logger import TBXLogger, TBXLoggerCallback
 
 warnings.filterwarnings("ignore", module="dgl")
-ray.init(num_gpus=0, num_cpus=4, log_to_driver=False)  # test 1 cpu and 30 cpus
+ray.init(num_gpus=0, num_cpus=8, log_to_driver=False)  # test 1 cpu and 30 cpus
 SEED = 0
 
 

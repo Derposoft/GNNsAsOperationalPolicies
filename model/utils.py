@@ -395,14 +395,16 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
     return node_embeddings.to(device)
 
 
-def get_loc(one_hot_graph, graph_size, default=0, get_all=False):
+def get_loc(one_hot_graph: torch.Tensor, graph_size, default=0, get_all=False):
     """
     get location of an agent given one-hot positional encoding on graph (0-indexed)
     """
     global SUPPRESS_WARNINGS
-    for i in range(graph_size):
-        if one_hot_graph[i]:
-            return i
+    one_hot_locations = (one_hot_graph[:graph_size] == 1).nonzero()
+    if len(one_hot_locations) > 1:
+        if get_all:
+            return one_hot_locations[0]
+        return one_hot_locations[0][0]
     if not SUPPRESS_WARNINGS["decode"]:
         print(
             f"test batch detected while decoding. agent not found. returning default={default} and suppressing this warning."
