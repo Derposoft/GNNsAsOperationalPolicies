@@ -20,7 +20,7 @@ import shlex
 from multiprocessing.pool import ThreadPool
 
 
-N_PROCS = 2  # multiprocessing.cpu_count() // 2
+N_PROCS = 3  # multiprocessing.cpu_count() // 2
 N_SEEDS = 10
 START_SEED = 0
 
