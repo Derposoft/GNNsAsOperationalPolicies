@@ -153,7 +153,7 @@ def get_blue_positions(x: torch.Tensor):
     blue_positions = (x == 1).nonzero()
     if len(blue_positions) == 0:
         return []
-    return (x == 1).nonzero()[0].numpy()
+    return blue_positions[0].numpy()
 
 
 hgr_embeddings_base = None
