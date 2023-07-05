@@ -155,7 +155,7 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
                     ).reshape([len(obs), pos_obs_size])
                 )
                 utils.timeit("embed HighGroundRelevance subproblem")
-            x = torch.cat([x, opt_high_ground_relevance], dim=-1)
+                x = torch.cat([x, opt_high_ground_relevance], dim=-1)
 
         obs = x
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
