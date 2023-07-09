@@ -31,9 +31,8 @@ from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print, UnifiedLogger
 
 warnings.filterwarnings("ignore", module="dgl")
-log = True
+# log = False
 # ray.init(num_gpus=1, num_cpus=3, log_to_driver=log)  # test 1 cpu and 30 cpus
-ray.init()  # log_to_driver=log)
 SEED = 0
 
 
@@ -147,7 +146,6 @@ def create_trainer(config, trainer_type=None, custom_model=""):
 
     model_config = CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS
     batch_size = config.batch_size
-    is_scout = "scout" in custom_model
     return (
         ppo.PPOConfig()
         .environment(
@@ -157,12 +155,12 @@ def create_trainer(config, trainer_type=None, custom_model=""):
             observation_space=obs_space,
         )
         .framework("torch")
-        .resources(num_gpus=1, num_cpus_per_worker=1)
+        .resources(num_gpus=1, num_cpus_per_worker=0.75)
         .rollouts(
             rollout_fragment_length="auto",  # if not is_scout else 50,
             num_rollout_workers=1,
             # batch_mode="truncate_episodes",
-        )  # 200)
+        )
         .evaluation(
             evaluation_interval=1,
             evaluation_duration_unit="episodes",
@@ -427,6 +425,9 @@ if __name__ == "__main__":
     # parse args
     config = parse_arguments()
     SEED = config.seed
+
+    # Connect to ray cluster
+    ray.init(log_to_driver=config.log_on)
 
     # run models
     run_baselines(
