@@ -19,10 +19,14 @@ import subprocess
 import shlex
 from multiprocessing.pool import ThreadPool
 
+# import pyarrow.fs as fs
+# fs.finalize_s3
 
-N_PROCS = 3  # multiprocessing.cpu_count() // 2
+
+N_PROCS = 5  # multiprocessing.cpu_count() // 2
 N_SEEDS = 10
 START_SEED = 0
+TRAIN_TIME = 100  # current train.py settings means this is equal to 80k episodes
 
 # read experiments.json
 with open("configs/experiments/experiments.json", "r") as f:
@@ -38,6 +42,7 @@ for experiment_name in experiments:
             "python train.py"
             + "".join([f" --{flag} {flags[flag]}" for flag in flags])
             + f" --seed {i+START_SEED}"
+            + f" --train_time {TRAIN_TIME}"
         )
 
 
