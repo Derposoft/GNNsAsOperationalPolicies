@@ -20,7 +20,7 @@ import shlex
 from multiprocessing.pool import ThreadPool
 
 
-N_PROCS = 1  # multiprocessing.cpu_count() // 2
+N_PROCS = 3  # multiprocessing.cpu_count() // 2
 N_SEEDS = 10
 START_SEED = 0
 
@@ -44,7 +44,9 @@ for experiment_name in experiments:
 # https://stackoverflow.com/questions/25120363/multiprocessing-execute-external-command-and-wait-before-proceeding
 def call_proc(cmd):
     p = subprocess.Popen(
-        shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        shlex.split(
+            cmd
+        )  # , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True # for some reason these break on windows if stdout/err is redirected??
     )
     out, err = p.communicate()
     return (out, err)

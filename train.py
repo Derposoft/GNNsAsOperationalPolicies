@@ -28,7 +28,7 @@ import model.utils as utils
 # algorithms to test
 from ray.rllib.algorithms import ppo, dqn, pg, a3c, impala
 from ray.rllib.models.catalog import MODEL_DEFAULTS
-from ray.tune.logger import pretty_print, TBXLogger, TBXLoggerCallback
+from ray.tune.logger import pretty_print, UnifiedLogger
 
 warnings.filterwarnings("ignore", module="dgl")
 log = True
@@ -91,7 +91,7 @@ def custom_log_creator(log_name, custom_dir="~/ray_results"):
         if not os.path.exists(custom_path):
             os.makedirs(custom_path)
         logdir = tempfile.mkdtemp(prefix=log_name, dir=custom_path)
-        return TBXLogger(config, logdir)
+        return UnifiedLogger(config, logdir)
 
     return logger_creator
 
