@@ -170,9 +170,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         # inference
         if self.conv_type == "gat":
             self.adjacency = self.adjacency.to(current_device)
-            graph = Batch.from_data_list(
-                [GraphData(_x, self.adjacency) for _x in x]
-            )  # .to(self.device)
+            graph = Batch.from_data_list([GraphData(_x, self.adjacency) for _x in x])
             x, batch_adjacency = graph.x, graph.edge_index
             utils.timeit("batching")
 
@@ -214,7 +212,8 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
     def value_function(self):
         assert self._features is not None, "must call forward() first"
         if not self._value_branch:
-            return torch.Tensor([0] * len(self._features))
+            current_device = next(self.parameters()).device
+            return torch.Tensor([0] * len(self._features)).to(current_device)
         if self._value_branch_separate:
             return self._value_branch(
                 self._value_branch_separate(self._last_flat_in)

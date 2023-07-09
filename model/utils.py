@@ -179,7 +179,7 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: torch.Tensor)
     relevances = {}
     # list of (u, v, [directions]) for advantaged locations from u to v
     high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
-    blue_locations = list(blue_positions.numpy())
+    blue_locations = list(blue_positions.cpu().numpy())
     for u, v, dirs in high_ground_points:
         # perform a search from high ground point's advantage point pair to the closest blue
         # print(v)
