@@ -32,7 +32,8 @@ from ray.tune.logger import pretty_print, UnifiedLogger
 
 warnings.filterwarnings("ignore", module="dgl")
 log = True
-ray.init(num_gpus=1, num_cpus=3, log_to_driver=log)  # test 1 cpu and 30 cpus
+# ray.init(num_gpus=1, num_cpus=3, log_to_driver=log)  # test 1 cpu and 30 cpus
+ray.init()  # log_to_driver=log)
 SEED = 0
 
 

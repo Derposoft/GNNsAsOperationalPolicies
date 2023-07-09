@@ -18,6 +18,7 @@ import multiprocessing
 import subprocess
 import shlex
 from multiprocessing.pool import ThreadPool
+import os
 
 # import pyarrow.fs as fs
 # fs.finalize_s3
@@ -56,6 +57,9 @@ def call_proc(cmd):
     out, err = p.communicate()
     return (out, err)
 
+
+# start ray cluster
+os.system("ray start --head --port=6379")
 
 print(f"running on {multiprocessing.cpu_count()} cpus")
 print(f"choosing to run {N_PROCS} processes")
