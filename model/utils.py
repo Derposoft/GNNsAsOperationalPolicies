@@ -80,29 +80,6 @@ scout_map_info = None  # store it out here for lru_cache hashability reasons
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-import multiprocessing
-
-
-class ProcessSafeDict:
-    def __init__(self):
-        pass
-
-
-"""        self.manager = multiprocessing.Manager()
-        self.dictionary = self.manager.dict()
-        self.lock = multiprocessing.Lock()
-
-    def __getitem__(self, key):
-        # print("getting", key)
-        with self.lock:
-            return self.dictionary.get(key, None)
-
-    def __setitem__(self, key, value):
-        # print("setting", key, value)
-        with self.lock:
-            self.dictionary[key] = value"""
-
-
 def set_obs_token(OBS_TOKEN):
     """
     update obs token and update node embedding size accordingly. only run BEFORE
@@ -145,7 +122,7 @@ def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int, device=
         extra_node_embeddings[:, u, -1] = 1
     if device:
         extra_node_embeddings = extra_node_embeddings.to(device)
-    return extra_node_embeddings  # .to(device)
+    return extra_node_embeddings
 
 
 # @lru_cache(maxsize=None)
@@ -197,7 +174,7 @@ def get_blue_positions(x: torch.Tensor):
     blue_positions = (x == 1).nonzero()
     if len(blue_positions) == 0:
         return None
-    return blue_positions[0]  # .numpy()
+    return blue_positions[0]
 
 
 hgr_embeddings_base = None
@@ -206,20 +183,12 @@ hgr_embeddings_base = None
 # 1.6s with no cache, ~160-180ms with compute_relevance_heuristics cache, ~20ms with optimized get_blue_positions
 # update: 2ms with a cache that actually works. note to self: don't use lru_cache for tensors.
 scout_get_high_ground_embeddings_relevance_cache = {}
-# scout_get_high_ground_embeddings_relevance_cache = None  # ProcessSafeDict()
 
 
 def scout_get_high_ground_embeddings_relevance(
     obs: torch.Tensor, model_map: ScoutMapInfo = None, device=None
 ) -> torch.Tensor:
     global scout_get_high_ground_embeddings_relevance_cache
-    # if not scout_get_high_ground_embeddings_relevance_cache:
-    #     scout_get_high_ground_embeddings_relevance_cache = ProcessSafeDict()
-    """print(obs.shape)
-    print(
-        "is obs in cache?:",
-        str(obs) in scout_get_high_ground_embeddings_relevance_cache,
-    )"""
     if str(obs) in scout_get_high_ground_embeddings_relevance_cache and len(
         scout_get_high_ground_embeddings_relevance_cache[str(obs)]
     ) == len(obs):
@@ -250,7 +219,7 @@ def scout_get_high_ground_embeddings_relevance(
         x = obs[i]
         blue_positions = get_blue_positions(x[pos_obs_size : 2 * pos_obs_size])
         relevance_scores = scout_compute_relevance_heuristic_for_waypoint(
-            blue_positions  # frozenset(blue_positions)
+            blue_positions  # frozenset(blue_positions) # note to self: don't do any weird transformations like this. too slow.
         )
         for u in relevance_scores:
             hg_relevance_node_embeddings[i, u, 0] = 1
@@ -921,9 +890,10 @@ def timeit(msg: str):
 
 
 def check_device(module_or_tensor: Union[nn.Module, torch.Tensor], name=""):
-    if isinstance(module_or_tensor, nn.Module):
-        print(
-            f"{type(module_or_tensor)}:{name} seems to be on {next(module_or_tensor.parameters()).device}"
-        )
-    else:
-        print(f"{type(module_or_tensor)}:{name} is on {module_or_tensor.device}")
+    if verbose:
+        if isinstance(module_or_tensor, nn.Module):
+            print(
+                f"{type(module_or_tensor)}:{name} seems to be on {next(module_or_tensor.parameters()).device}"
+            )
+        else:
+            print(f"{type(module_or_tensor)}:{name} is on {module_or_tensor.device}")
