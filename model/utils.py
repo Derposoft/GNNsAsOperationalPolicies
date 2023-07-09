@@ -122,13 +122,27 @@ def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
     return extra_node_embeddings
 
 
-@lru_cache(maxsize=None)
-def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int]):
+# @lru_cache(maxsize=None)
+scout_compute_relevance_heuristic_for_waypoint_cache = {}
+cache_miss, cache_calls = 0, 0
+
+
+def scout_compute_relevance_heuristic_for_waypoint(blue_positions: torch.Tensor):
     """
     computes a simple relevance heuristic for certain waypoints based on how far away the nearest blue agent is.
     :param blue_positions: frozenset of integers corresponding to the locations where the blue agents are
     :returns: map from waypoint to relevance score
     """
+    # global cache_calls, cache_miss
+    # cache_calls += 1
+    if not blue_positions:
+        return {}
+    global scout_compute_relevance_heuristic_for_waypoint_cache
+
+    blue_pos_string = str(blue_positions)
+    if blue_pos_string in scout_compute_relevance_heuristic_for_waypoint_cache:
+        return scout_compute_relevance_heuristic_for_waypoint_cache[blue_pos_string]
+    # cache_miss += 1
 
     def relevance_score_from_dist(dist):
         return min(1 / (dist + 1e-5), 1)  # clipping
@@ -136,7 +150,7 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
     relevances = {}
     # list of (u, v, [directions]) for advantaged locations from u to v
     high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
-    blue_locations = list(blue_positions)
+    blue_locations = list(blue_positions.numpy())
     for u, v, dirs in high_ground_points:
         # perform a search from high ground point's advantage point pair to the closest blue
         # print(v)
@@ -145,6 +159,7 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
             scout_map_info, v, blue_locations, compute_dist_only=True
         )
         relevances[u] = max(relevances.get(u, 0), relevance_score_from_dist(dist))
+    scout_compute_relevance_heuristic_for_waypoint_cache[blue_pos_string] = relevances
     return relevances
 
 
@@ -152,18 +167,29 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: frozenset[int
 def get_blue_positions(x: torch.Tensor):
     blue_positions = (x == 1).nonzero()
     if len(blue_positions) == 0:
-        return []
-    return blue_positions[0].numpy()
+        return None
+    return blue_positions[0]  # .numpy()
 
 
 hgr_embeddings_base = None
 
 
 # 1.6s with no cache, ~160-180ms with compute_relevance_heuristics cache, ~20ms with optimized get_blue_positions
-@lru_cache(maxsize=None)
+# update: 2ms with a cache that actually works. note to self: don't use lru_cache for tensors.
+scout_get_high_ground_embeddings_relevance_cache = {}
+
+
 def scout_get_high_ground_embeddings_relevance(
     obs: torch.Tensor, model_map: ScoutMapInfo = None
 ) -> torch.Tensor:
+    global scout_get_high_ground_embeddings_relevance_cache
+    print(obs.shape)
+    print(
+        "is obs in cache?:",
+        str(obs) in scout_get_high_ground_embeddings_relevance_cache,
+    )
+    if str(obs) in scout_get_high_ground_embeddings_relevance_cache:
+        return scout_get_high_ground_embeddings_relevance_cache[str(obs)]
     global scout_map_info
     if not scout_map_info:
         scout_map_info = model_map
@@ -183,11 +209,15 @@ def scout_get_high_ground_embeddings_relevance(
         x = obs[i]
         blue_positions = get_blue_positions(x[pos_obs_size : 2 * pos_obs_size])
         relevance_scores = scout_compute_relevance_heuristic_for_waypoint(
-            frozenset(blue_positions)
+            blue_positions  # frozenset(blue_positions)
         )
         for u in relevance_scores:
             hg_relevance_node_embeddings[i, u, 0] = 1
     # timeit("updating embeddings")
+    # print(f"{cache_miss} miss, {cache_calls} calls")
+    scout_get_high_ground_embeddings_relevance_cache[
+        str(obs)
+    ] = hg_relevance_node_embeddings
     return hg_relevance_node_embeddings
 
 
@@ -216,6 +246,7 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
                 batch_size, pos_obs_size
             )
             node_embeddings = torch.cat([node_embeddings, hg_node_embeddings], dim=-1)
+            timeit("high ground embedding")
         if GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
             hg_relevance_node_embeddings = scout_get_high_ground_embeddings_relevance(
                 obs
@@ -223,6 +254,7 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
             node_embeddings = torch.cat(
                 [node_embeddings, hg_relevance_node_embeddings], dim=-1
             )
+            timeit("high ground rel")
         if GRAPH_OBS_TOKEN["flanking"]:
             extra_node_embeddings_flanking = torch.zeros([batch_size, pos_obs_size, 4])
             for i in range(len(obs)):
@@ -750,7 +782,16 @@ class LocalPooling(nn.Module):
         if agent_nodes == None:
             print("agent node not provided to local aggregation")
             sys.exit()
-        x = x[range(len(x)), agent_nodes, :]
+        if not len(agent_nodes):
+            return x[:, 0, :]
+        # print(agent_nodes)
+        # print(x)
+        # print(x[agent_nodes])
+        # x = x[range(len(x)), agent_nodes, :]
+        # print("AGENT NODES", agent_nodes)
+        x = x[agent_nodes[:, 0], agent_nodes[:, 1]]
+        # print(x)
+
         return x
 
 

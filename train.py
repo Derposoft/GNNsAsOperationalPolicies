@@ -28,11 +28,11 @@ import model.utils as utils
 # algorithms to test
 from ray.rllib.algorithms import ppo, dqn, pg, a3c, impala
 from ray.rllib.models.catalog import MODEL_DEFAULTS
-from ray.tune.logger import pretty_print
-from ray.tune.logger import TBXLogger, TBXLoggerCallback
+from ray.tune.logger import pretty_print, TBXLogger, TBXLoggerCallback
 
 warnings.filterwarnings("ignore", module="dgl")
-ray.init(num_gpus=0, num_cpus=3, log_to_driver=False)  # test 1 cpu and 30 cpus
+log = False
+ray.init(num_gpus=1, num_cpus=3, log_to_driver=log)  # test 1 cpu and 30 cpus
 SEED = 0
 
 
@@ -70,7 +70,7 @@ def create_env_config(config):
         "num_red": config.n_red,
         "num_blue": config.n_blue,
     }
-    ## i.e. init_red "pos": tuple(x, z) or "L"/"R" region of the map
+    # i.e. init_red "pos": tuple(x, z) or "L"/"R" region of the map
     # "init_red": [{"pos": (11, 1), "dir": 1}, {"pos": None}, {"pos": "L", "dir": None}]
     if hasattr(config, "penalty_stay"):
         env_config["penalty_stay"] = config.penalty_stay
@@ -120,7 +120,8 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         "embed_dir": config.embed_dir,
         # different types of OPT subproblems to load
         "embed_opt": config.embed_opt,
-        "flanking": config.opt_flanking,  # does positioning on this node consistute "flanking" the enemy?
+        # does positioning on this node consistute "flanking" the enemy?
+        "flanking": config.opt_flanking,
         "scout_high_ground": config.opt_scout_high_ground,
         "scout_high_ground_relevance": config.opt_scout_high_ground_relevance,
         "verbose": config.log_on,
@@ -144,6 +145,8 @@ def create_trainer(config, trainer_type=None, custom_model=""):
     }
 
     model_config = CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS
+    batch_size = 800
+    is_scout = "scout" in custom_model
     return (
         ppo.PPOConfig()
         .environment(
@@ -153,9 +156,12 @@ def create_trainer(config, trainer_type=None, custom_model=""):
             observation_space=obs_space,
         )
         .framework("torch")
-        .training(lr=config.lr, model=model_config, train_batch_size=800)
-        .resources(num_gpus=torch.cuda.device_count(), num_cpus_per_worker=1)
-        .rollouts(rollout_fragment_length=200)
+        .resources(num_gpus=0, num_cpus_per_worker=1)
+        .rollouts(
+            rollout_fragment_length="auto",  # if not is_scout else 50,
+            num_rollout_workers=1,
+            # batch_mode="truncate_episodes",
+        )  # 200)
         .evaluation(
             evaluation_interval=1,
             evaluation_duration_unit="episodes",
@@ -163,7 +169,13 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         )
         .debugging(
             logger_creator=lambda x: custom_log_creator(config.name)(x),
-            log_level="ERROR",
+            log_level="INFO" if config.log_on else "ERROR",
+        )
+        .training(
+            sgd_minibatch_size=batch_size,
+            lr=config.lr,
+            model=model_config,
+            train_batch_size=batch_size,
         )
         .build()
     )

@@ -151,15 +151,19 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
 
         # transform obs to graph (for pyG, also do list[data]->torch_geometric.Batch)
         obs = input_dict["obs_flat"].float()
-        utils.timeit("obs to float")
+        utils.timeit(f"obs to float -- {len(obs)}")
 
         x = utils.scout_embed_obs_in_map(obs, self.map)
         batch_size = x.shape[0]
         graph_size = x.shape[1]
         utils.timeit("scout embed obs")
 
-        agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
-        utils.timeit("get agent nodes")
+        # agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
+        # utils.timeit("get agent nodes")
+
+        agent_nodes_new = (obs[:, : self.map.get_graph_size()] == 2).nonzero()
+        assert len(obs) == len(agent_nodes_new) or len(agent_nodes_new) == 0
+        utils.timeit("get agent nodes new")
 
         # inference
         if self.conv_type == "gat":
@@ -178,7 +182,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         utils.timeit("gnn convs")
 
         x = x.reshape([batch_size, graph_size, -1])
-        self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes)
+        self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes_new)
         utils.timeit("convs")
 
         if self.is_hybrid:

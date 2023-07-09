@@ -20,7 +20,7 @@ import shlex
 from multiprocessing.pool import ThreadPool
 
 
-N_PROCS = 3  # multiprocessing.cpu_count() // 2
+N_PROCS = 1  # multiprocessing.cpu_count() // 2
 N_SEEDS = 10
 START_SEED = 0
 
@@ -35,7 +35,7 @@ for experiment_name in experiments:
     for i in range(N_SEEDS):
         flags["name"] = experiment_name + f"_SEED{i+START_SEED}"
         experiment_cmds.append(
-            "python3 train.py"
+            "python train.py"
             + "".join([f" --{flag} {flags[flag]}" for flag in flags])
             + f" --seed {i+START_SEED}"
         )
