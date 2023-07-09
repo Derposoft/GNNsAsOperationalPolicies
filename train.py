@@ -145,7 +145,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
     }
 
     model_config = CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS
-    batch_size = 800
+    batch_size = config.batch_size
     is_scout = "scout" in custom_model
     return (
         ppo.PPOConfig()
@@ -377,6 +377,7 @@ def parse_arguments():
         "--seed", type=int, default=0, help="seed to use for reproducibility purposes"
     )
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+    parser.add_argument("--batch_size", type=int, default=800, help="batch size")
 
     # graph obs config
     parser.add_argument(
