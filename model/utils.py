@@ -15,6 +15,7 @@ import torch_geometric.nn.pool as pool
 from typing import List
 from functools import lru_cache
 import os
+from typing import Union
 
 from graph_scout.envs.data.terrain_graph import MapInfo as ScoutMapInfo
 from graph_scout.envs.utils.config import default_configs as scout_config
@@ -76,7 +77,7 @@ MOVE_DEGS = {
     "move_3deg_away": None,
 }
 scout_map_info = None  # store it out here for lru_cache hashability reasons
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 import multiprocessing
@@ -84,16 +85,22 @@ import multiprocessing
 
 class ProcessSafeDict:
     def __init__(self):
-        self.manager = multiprocessing.Manager()
+        pass
+
+
+"""        self.manager = multiprocessing.Manager()
         self.dictionary = self.manager.dict()
+        self.lock = multiprocessing.Lock()
 
     def __getitem__(self, key):
         # print("getting", key)
-        return self.dictionary.get(key, None)
+        with self.lock:
+            return self.dictionary.get(key, None)
 
     def __setitem__(self, key, value):
         # print("setting", key, value)
-        self.dictionary[key] = value
+        with self.lock:
+            self.dictionary[key] = value"""
 
 
 def set_obs_token(OBS_TOKEN):
@@ -124,7 +131,7 @@ def set_obs_token(OBS_TOKEN):
 
 
 @lru_cache(maxsize=None)
-def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
+def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int, device=None):
     """
     :param batch_size: batch size of input to create embeddings for
     :param pos_obs_size: observation size of positional one-hot encodings (n nodes in scout graph)
@@ -136,12 +143,14 @@ def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
     extra_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
     for u, v, dirs in high_ground_points:
         extra_node_embeddings[:, u, -1] = 1
-    return extra_node_embeddings
+    if device:
+        extra_node_embeddings = extra_node_embeddings.to(device)
+    return extra_node_embeddings  # .to(device)
 
 
 # @lru_cache(maxsize=None)
-# scout_compute_relevance_heuristic_for_waypoint_cache = {}
-scout_compute_relevance_heuristic_for_waypoint_cache = None  # ProcessSafeDict()
+scout_compute_relevance_heuristic_for_waypoint_cache = {}
+# scout_compute_relevance_heuristic_for_waypoint_cache = None  # ProcessSafeDict()
 cache_miss, cache_calls = 0, 0
 
 
@@ -156,8 +165,8 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: torch.Tensor)
     if not blue_positions:
         return {}
     global scout_compute_relevance_heuristic_for_waypoint_cache
-    if not scout_compute_relevance_heuristic_for_waypoint_cache:
-        scout_compute_relevance_heuristic_for_waypoint_cache = ProcessSafeDict()
+    # if not scout_compute_relevance_heuristic_for_waypoint_cache:
+    #    scout_compute_relevance_heuristic_for_waypoint_cache = ProcessSafeDict()
 
     blue_pos_string = str(blue_positions)
     if blue_pos_string in scout_compute_relevance_heuristic_for_waypoint_cache:
@@ -196,23 +205,32 @@ hgr_embeddings_base = None
 
 # 1.6s with no cache, ~160-180ms with compute_relevance_heuristics cache, ~20ms with optimized get_blue_positions
 # update: 2ms with a cache that actually works. note to self: don't use lru_cache for tensors.
-# scout_get_high_ground_embeddings_relevance_cache = {}
-scout_get_high_ground_embeddings_relevance_cache = None  # ProcessSafeDict()
+scout_get_high_ground_embeddings_relevance_cache = {}
+# scout_get_high_ground_embeddings_relevance_cache = None  # ProcessSafeDict()
 
 
 def scout_get_high_ground_embeddings_relevance(
-    obs: torch.Tensor, model_map: ScoutMapInfo = None
+    obs: torch.Tensor, model_map: ScoutMapInfo = None, device=None
 ) -> torch.Tensor:
     global scout_get_high_ground_embeddings_relevance_cache
-    if not scout_get_high_ground_embeddings_relevance_cache:
-        scout_get_high_ground_embeddings_relevance_cache = ProcessSafeDict()
+    # if not scout_get_high_ground_embeddings_relevance_cache:
+    #     scout_get_high_ground_embeddings_relevance_cache = ProcessSafeDict()
     """print(obs.shape)
     print(
         "is obs in cache?:",
         str(obs) in scout_get_high_ground_embeddings_relevance_cache,
     )"""
-    if str(obs) in scout_get_high_ground_embeddings_relevance_cache:
-        return scout_get_high_ground_embeddings_relevance_cache[str(obs)]
+    if str(obs) in scout_get_high_ground_embeddings_relevance_cache and len(
+        scout_get_high_ground_embeddings_relevance_cache[str(obs)]
+    ) == len(obs):
+        if not device or scout_get_high_ground_embeddings_relevance_cache[
+            str(obs)
+        ].device == torch.device(device):
+            check_device(
+                scout_get_high_ground_embeddings_relevance_cache[str(obs)],
+                "HGR_cache_output",
+            )
+            return scout_get_high_ground_embeddings_relevance_cache[str(obs)]
     global scout_map_info
     if not scout_map_info:
         scout_map_info = model_map
@@ -238,13 +256,19 @@ def scout_get_high_ground_embeddings_relevance(
             hg_relevance_node_embeddings[i, u, 0] = 1
     # timeit("updating embeddings")
     # print(f"{cache_miss} miss, {cache_calls} calls")
+    if device:
+        hg_relevance_node_embeddings = hg_relevance_node_embeddings.to(device)
+    check_device(
+        hg_relevance_node_embeddings,
+        "HGR_UNcached_output",
+    )
     scout_get_high_ground_embeddings_relevance_cache[
         str(obs)
     ] = hg_relevance_node_embeddings
     return hg_relevance_node_embeddings
 
 
-def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
+def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo, device=None):
     """
     :param obs: observation from combat_env gym
     :param map: MapInfo object from inside of combat_env gym (for graph connectivity info)
@@ -266,13 +290,13 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo):
     if GRAPH_OBS_TOKEN["embed_opt"]:
         if GRAPH_OBS_TOKEN["scout_high_ground"]:
             hg_node_embeddings = scout_get_high_ground_embeddings(
-                batch_size, pos_obs_size
+                batch_size, pos_obs_size, device
             )
             node_embeddings = torch.cat([node_embeddings, hg_node_embeddings], dim=-1)
             timeit("high ground embedding")
         if GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
             hg_relevance_node_embeddings = scout_get_high_ground_embeddings_relevance(
-                obs
+                obs, device=device
             )
             node_embeddings = torch.cat(
                 [node_embeddings, hg_relevance_node_embeddings], dim=-1
@@ -447,7 +471,7 @@ def efficient_embed_obs_in_map(obs: torch.Tensor, map: Fig8MapInfo, obs_shapes=N
                     )
                     SUPPRESS_WARNINGS["optimization_none"] = True
 
-    return node_embeddings.to(device)
+    return node_embeddings  # .to(device)
 
 
 def get_loc(one_hot_graph: torch.Tensor, graph_size, default=0, get_all=False):
@@ -894,3 +918,12 @@ def timeit(msg: str):
         global prev_time
         print(f"{time.time()-prev_time:2.4f} {msg}")
         prev_time = time.time()
+
+
+def check_device(module_or_tensor: Union[nn.Module, torch.Tensor], name=""):
+    if isinstance(module_or_tensor, nn.Module):
+        print(
+            f"{type(module_or_tensor)}:{name} seems to be on {next(module_or_tensor.parameters()).device}"
+        )
+    else:
+        print(f"{type(module_or_tensor)}:{name} is on {module_or_tensor.device}")

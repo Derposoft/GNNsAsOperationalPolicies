@@ -156,7 +156,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
             observation_space=obs_space,
         )
         .framework("torch")
-        .resources(num_gpus=0, num_cpus_per_worker=1)
+        .resources(num_gpus=1, num_cpus_per_worker=1)
         .rollouts(
             rollout_fragment_length="auto",  # if not is_scout else 50,
             num_rollout_workers=1,
