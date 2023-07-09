@@ -31,7 +31,7 @@ from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print, TBXLogger, TBXLoggerCallback
 
 warnings.filterwarnings("ignore", module="dgl")
-log = False
+log = True
 ray.init(num_gpus=1, num_cpus=3, log_to_driver=log)  # test 1 cpu and 30 cpus
 SEED = 0
 

@@ -79,6 +79,23 @@ scout_map_info = None  # store it out here for lru_cache hashability reasons
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+import multiprocessing
+
+
+class ProcessSafeDict:
+    def __init__(self):
+        self.manager = multiprocessing.Manager()
+        self.dictionary = self.manager.dict()
+
+    def __getitem__(self, key):
+        # print("getting", key)
+        return self.dictionary.get(key, None)
+
+    def __setitem__(self, key, value):
+        # print("setting", key, value)
+        self.dictionary[key] = value
+
+
 def set_obs_token(OBS_TOKEN):
     """
     update obs token and update node embedding size accordingly. only run BEFORE
@@ -123,7 +140,8 @@ def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int):
 
 
 # @lru_cache(maxsize=None)
-scout_compute_relevance_heuristic_for_waypoint_cache = {}
+# scout_compute_relevance_heuristic_for_waypoint_cache = {}
+scout_compute_relevance_heuristic_for_waypoint_cache = None  # ProcessSafeDict()
 cache_miss, cache_calls = 0, 0
 
 
@@ -138,6 +156,8 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: torch.Tensor)
     if not blue_positions:
         return {}
     global scout_compute_relevance_heuristic_for_waypoint_cache
+    if not scout_compute_relevance_heuristic_for_waypoint_cache:
+        scout_compute_relevance_heuristic_for_waypoint_cache = ProcessSafeDict()
 
     blue_pos_string = str(blue_positions)
     if blue_pos_string in scout_compute_relevance_heuristic_for_waypoint_cache:
@@ -176,18 +196,21 @@ hgr_embeddings_base = None
 
 # 1.6s with no cache, ~160-180ms with compute_relevance_heuristics cache, ~20ms with optimized get_blue_positions
 # update: 2ms with a cache that actually works. note to self: don't use lru_cache for tensors.
-scout_get_high_ground_embeddings_relevance_cache = {}
+# scout_get_high_ground_embeddings_relevance_cache = {}
+scout_get_high_ground_embeddings_relevance_cache = None  # ProcessSafeDict()
 
 
 def scout_get_high_ground_embeddings_relevance(
     obs: torch.Tensor, model_map: ScoutMapInfo = None
 ) -> torch.Tensor:
     global scout_get_high_ground_embeddings_relevance_cache
-    print(obs.shape)
+    if not scout_get_high_ground_embeddings_relevance_cache:
+        scout_get_high_ground_embeddings_relevance_cache = ProcessSafeDict()
+    """print(obs.shape)
     print(
         "is obs in cache?:",
         str(obs) in scout_get_high_ground_embeddings_relevance_cache,
-    )
+    )"""
     if str(obs) in scout_get_high_ground_embeddings_relevance_cache:
         return scout_get_high_ground_embeddings_relevance_cache[str(obs)]
     global scout_map_info
