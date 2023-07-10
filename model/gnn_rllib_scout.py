@@ -168,8 +168,8 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         utils.timeit("get agent nodes new")
 
         # inference
+        self.adjacency = self.adjacency.to(current_device)
         if self.conv_type == "gat":
-            self.adjacency = self.adjacency.to(current_device)
             graph = Batch.from_data_list([GraphData(_x, self.adjacency) for _x in x])
             x, batch_adjacency = graph.x, graph.edge_index
             utils.timeit("batching")
