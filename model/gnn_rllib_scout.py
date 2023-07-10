@@ -177,10 +177,10 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         for conv, norm in zip(self.gats, self.norms):
             utils.check_device(conv, "convs")
             utils.check_device(x, "x_for_convs")
-            utils.check_device(batch_adjacency, "adj_for_convs")
             if self.conv_type == "gcn":
                 x = conv(x, self.adjacency)
             else:
+                utils.check_device(batch_adjacency, "adj_for_convs")
                 x = conv(x, batch_adjacency)  # batching=8.9ms, convs=26.3ms
                 # x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0) # 180-190ms
 
