@@ -56,7 +56,7 @@ def create_env_config(config):
         "obs_dir": config.obs_dir,
         "obs_team": config.obs_team,
         "obs_sight": config.obs_sight,
-        "log_on": config.log_on,
+        "log_on": config.verbose,
         "log_path": config.log_path,
         # "reward_step_on": False, "reward_episode_on": True, "episode_decay_soft": True,
         # "health_lookup": {"type": "table", "reward": [8, 4, 2, 0], "damage": [0, 1, 2, 100]},
@@ -124,7 +124,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         "flanking": config.opt_flanking,
         "scout_high_ground": config.opt_scout_high_ground,
         "scout_high_ground_relevance": config.opt_scout_high_ground_relevance,
-        "verbose": config.log_on,
+        "verbose": config.verbose,
     }
 
     # set model defaults
@@ -168,7 +168,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         )
         .debugging(
             logger_creator=lambda x: custom_log_creator(config.name)(x),
-            log_level="INFO" if config.log_on else "ERROR",
+            log_level="INFO" if config.verbose else "ERROR",
         )
         .training(
             sgd_minibatch_size=batch_size,
@@ -304,7 +304,8 @@ def parse_arguments():
     )
     parser.add_argument(
         "--log_on",
-        dest="log_on",
+        "--verbose",
+        dest="verbose",
         action="store_true",
         default=False,
         help="generate verbose logs",
@@ -426,8 +427,9 @@ if __name__ == "__main__":
     config = parse_arguments()
     SEED = config.seed
 
-    # Connect to ray cluster
-    ray.init(log_to_driver=config.log_on)
+    # Connect to ray cluster (and start if not started because for some reason ray.init isn't doing that)
+    os.system("ray start --head --port 6379")
+    ray.init(log_to_driver=config.verbose)
 
     # run models
     run_baselines(

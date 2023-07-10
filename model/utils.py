@@ -882,10 +882,10 @@ prev_time = time.time()
 verbose = os.environ.get("verbose", False)
 
 
-def timeit(msg: str):
+def timeit(msg: str, n_digits: int = 4):
     if verbose:
         global prev_time
-        print(f"{time.time()-prev_time:2.4f} {msg}")
+        print(f"{time.time()-prev_time:2.{n_digits}f} {msg}")
         prev_time = time.time()
 
 

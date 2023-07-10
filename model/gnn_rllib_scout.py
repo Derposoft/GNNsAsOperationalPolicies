@@ -199,7 +199,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
             utils.timeit("hybrid section")
 
         logits = self._logits(self._features)
-        utils.timeit("get logsits")
+        utils.timeit("get logits")
         utils.check_device(logits, "logits")
         utils.check_device(self._logits, "_logits_layer")
 
