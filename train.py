@@ -78,7 +78,7 @@ def create_env_config(config):
         env_config["threshold_damage_2_blue"] = config.threshold_blue
     if hasattr(config, "threshold_red"):
         env_config["threshold_damage_2_red"] = config.threshold_red
-    return env_config  # , n_episodes
+    return env_config
 
 
 # store tb logs in custom named dir
@@ -130,7 +130,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
     # set model defaults
     CUSTOM_DEFAULTS = {
         "custom_model": custom_model,
-        # Extra kwargs to be passed to your model"s c"tor.
+        # Extra kwargs to be passed to your model's c'tor.
         "custom_model_config": {
             "map": setup_env.map,
             "nred": env_config["n_red"],
@@ -200,7 +200,6 @@ def train(trainer, model_name, train_time=200, checkpoint_models=True, config=No
 # run baseline tests with a few different algorithms
 def run_baselines(
     config,
-    run_default_baseline_metrics=False,
     train_time=200,
     checkpoint_models=True,
     custom_model="graph_transformer_policy",
@@ -226,6 +225,7 @@ def run_baselines(
 
     trainer = create_trainer(config, trainer_type=ppo, custom_model=custom_model)
     train(trainer, config.name, train_time, checkpoint_models, None)
+    trainer.cleanup()
 
 
 # parse arguments
