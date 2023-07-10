@@ -7,6 +7,9 @@ run `python train.py --help` for more information on how to start training a mod
 # general
 import warnings
 
+warnings.warn = lambda *args, **kwargs: None
+warnings.filterwarnings("ignore", module="dgl")
+
 import argparse
 import os
 import pickle
@@ -30,7 +33,6 @@ from ray.rllib.algorithms import ppo, dqn, pg, a3c, impala
 from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.tune.logger import pretty_print, UnifiedLogger
 
-warnings.filterwarnings("ignore", module="dgl")
 # log = False
 # ray.init(num_gpus=1, num_cpus=3, log_to_driver=log)  # test 1 cpu and 30 cpus
 SEED = 0
