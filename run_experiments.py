@@ -37,7 +37,8 @@ for experiment_name in experiments:
     for i in range(N_SEEDS):
         flags["name"] = experiment_name + f"_SEED{i+START_SEED}"
         experiment_cmds.append(
-            "python train.py"
+            'PYTHONWARNINGS="ignore::DeprecationWarning" '  # because idc about deprecated loggers.
+            + "python train.py"
             + "".join([f" --{flag} {flags[flag]}" for flag in flags])
             + f" --seed {i+START_SEED}"
             + f" --train_time {TRAIN_TIME}"

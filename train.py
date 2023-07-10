@@ -438,3 +438,6 @@ if __name__ == "__main__":
         train_time=config.train_time,
         checkpoint_models=False,
     )
+
+    # Disconnect from ray cluster (this should happen automatically, but just in case)
+    ray.shutdown()
