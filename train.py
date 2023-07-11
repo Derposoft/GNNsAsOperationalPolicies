@@ -430,8 +430,11 @@ if __name__ == "__main__":
     SEED = config.seed
 
     # Connect to ray cluster (and start if not started because for some reason ray.init isn't doing that)
-    os.system("ray start --head --port 6379")
-    ray.init(log_to_driver=config.verbose)
+    try:
+        ray.init(log_to_driver=config.verbose)
+    except:
+        os.system("ray start --head --port 6379")
+        ray.init(log_to_driver=config.verbose)
 
     # run models
     run_baselines(

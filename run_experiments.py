@@ -51,8 +51,9 @@ def call_proc(cmd):
             cmd
         )  # , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True # for some reason these break on windows if stdout/err is redirected??
     )
-    out, err = p.communicate()
-    return (out, err)
+    # out, err = p.communicate()
+    # return (out, err)
+    return p.wait()
 
 
 # start ray cluster
