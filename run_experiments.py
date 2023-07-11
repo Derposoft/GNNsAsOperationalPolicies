@@ -24,7 +24,7 @@ import os
 N_PROCS = 5  # multiprocessing.cpu_count() // 2
 N_SEEDS = 10
 START_SEED = 0
-TRAIN_TIME = 70  # equivalent to 60k eps. scout env models tend to plateau at ~50k and skirmish at ~30-40k (?)
+TRAIN_TIME = 75  # equivalent to 60k eps. scout env models tend to plateau at ~50k and skirmish at ~30-40k (?)
 
 # read experiments.json
 with open("configs/experiments/experiments.json", "r") as f:
