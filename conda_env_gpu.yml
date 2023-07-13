@@ -33,7 +33,6 @@ dependencies:
   - giflib=5.2.1
   - gmpy2=2.1.2
   - gputil=1.4.0
-  - icc_rt=2022.1.0
   - idna=3.4
   - intel-openmp=2021.4.0
   - ipykernel=6.15.2
@@ -62,11 +61,6 @@ dependencies:
   - libxml2=2.10.3
   - libzlib=1.2.13
   - lz4-c=1.9.3
-  - m2w64-gcc-libgfortran=5.3.0
-  - m2w64-gcc-libs=5.3.0
-  - m2w64-gcc-libs-core=5.3.0
-  - m2w64-gmp=6.1.0
-  - m2w64-libwinpthread-git=5.0.0.4634.697f757
   - markupsafe=2.1.1
   - matplotlib-inline=0.1.6
   - mkl=2021.4.0
@@ -78,7 +72,6 @@ dependencies:
   - mpi=1.0
   - mpir=3.0.0
   - mpmath=1.2.1
-  - msys2-conda-epoch=20160418
   - nest-asyncio=1.5.5
   - networkx=2.8.4
   - numpy=1.24.3
@@ -95,7 +88,6 @@ dependencies:
   - prompt-toolkit=3.0.20
   - psutil=5.9.0
   - pthread-stubs=0.3
-  - pthreads-win32=2.9.1
   - ptyprocess=0.7.0
   - pure_eval=0.2.2
   - pycparser=2.21
@@ -107,7 +99,6 @@ dependencies:
   - python-dateutil=2.8.2
   - python_abi=3.9
   - pytorch-mutex=1.0
-  - pywin32=305
   - pyzmq=23.2.0
   - requests=2.29.0
   - scikit-learn=1.2.2
@@ -123,11 +114,7 @@ dependencies:
   - tornado=6.2
   - typing_extensions=4.3.0
   - tzdata=2022e
-  - ucrt=10.0.20348.0
   - urllib3=1.26.16
-  - vc=14.2
-  - vc14_runtime=14.36.32532
-  - vs2015_runtime=14.36.32532
   - wcwidth=0.2.5
   - wheel=0.37.1
   - win_inet_pton=1.1.0
