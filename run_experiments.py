@@ -18,11 +18,13 @@ import multiprocessing
 import subprocess
 import shlex
 from multiprocessing.pool import ThreadPool
+import os
 
 
-N_PROCS = 3  # multiprocessing.cpu_count() // 2
+N_PROCS = 5  # multiprocessing.cpu_count() // 2
 N_SEEDS = 10
 START_SEED = 0
+TRAIN_TIME = 75  # equivalent to 60k eps. scout env models tend to plateau at ~50k and skirmish at ~30-40k (?)
 
 # read experiments.json
 with open("configs/experiments/experiments.json", "r") as f:
@@ -35,20 +37,27 @@ for experiment_name in experiments:
     for i in range(N_SEEDS):
         flags["name"] = experiment_name + f"_SEED{i+START_SEED}"
         experiment_cmds.append(
-            "python3 train.py"
+            "python train.py"
             + "".join([f" --{flag} {flags[flag]}" for flag in flags])
             + f" --seed {i+START_SEED}"
+            + f" --train_time {TRAIN_TIME}"
         )
 
 
 # https://stackoverflow.com/questions/25120363/multiprocessing-execute-external-command-and-wait-before-proceeding
 def call_proc(cmd):
     p = subprocess.Popen(
-        shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        shlex.split(
+            cmd
+        )  # , stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True # for some reason these break on windows if stdout/err is redirected??
     )
-    out, err = p.communicate()
-    return (out, err)
+    # out, err = p.communicate()
+    # return (out, err)
+    return p.wait()
 
+
+# start ray cluster
+os.system("ray start --head --port=6379")
 
 print(f"running on {multiprocessing.cpu_count()} cpus")
 print(f"choosing to run {N_PROCS} processes")

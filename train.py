@@ -7,6 +7,9 @@ run `python train.py --help` for more information on how to start training a mod
 # general
 import warnings
 
+warnings.warn = lambda *args, **kwargs: None
+warnings.filterwarnings("ignore", module="dgl")
+
 import argparse
 import os
 import pickle
@@ -28,11 +31,10 @@ import model.utils as utils
 # algorithms to test
 from ray.rllib.algorithms import ppo, dqn, pg, a3c, impala
 from ray.rllib.models.catalog import MODEL_DEFAULTS
-from ray.tune.logger import pretty_print
-from ray.tune.logger import TBXLogger, TBXLoggerCallback
+from ray.tune.logger import pretty_print, UnifiedLogger
 
-warnings.filterwarnings("ignore", module="dgl")
-ray.init(num_gpus=0, num_cpus=3, log_to_driver=False)  # test 1 cpu and 30 cpus
+# log = False
+# ray.init(num_gpus=1, num_cpus=3, log_to_driver=log)  # test 1 cpu and 30 cpus
 SEED = 0
 
 
@@ -56,7 +58,7 @@ def create_env_config(config):
         "obs_dir": config.obs_dir,
         "obs_team": config.obs_team,
         "obs_sight": config.obs_sight,
-        "log_on": config.log_on,
+        "log_on": config.verbose,
         "log_path": config.log_path,
         # "reward_step_on": False, "reward_episode_on": True, "episode_decay_soft": True,
         # "health_lookup": {"type": "table", "reward": [8, 4, 2, 0], "damage": [0, 1, 2, 100]},
@@ -70,7 +72,7 @@ def create_env_config(config):
         "num_red": config.n_red,
         "num_blue": config.n_blue,
     }
-    ## i.e. init_red "pos": tuple(x, z) or "L"/"R" region of the map
+    # i.e. init_red "pos": tuple(x, z) or "L"/"R" region of the map
     # "init_red": [{"pos": (11, 1), "dir": 1}, {"pos": None}, {"pos": "L", "dir": None}]
     if hasattr(config, "penalty_stay"):
         env_config["penalty_stay"] = config.penalty_stay
@@ -78,7 +80,7 @@ def create_env_config(config):
         env_config["threshold_damage_2_blue"] = config.threshold_blue
     if hasattr(config, "threshold_red"):
         env_config["threshold_damage_2_red"] = config.threshold_red
-    return env_config  # , n_episodes
+    return env_config
 
 
 # store tb logs in custom named dir
@@ -91,7 +93,7 @@ def custom_log_creator(log_name, custom_dir="~/ray_results"):
         if not os.path.exists(custom_path):
             os.makedirs(custom_path)
         logdir = tempfile.mkdtemp(prefix=log_name, dir=custom_path)
-        return TBXLogger(config, logdir)
+        return UnifiedLogger(config, logdir)
 
     return logger_creator
 
@@ -120,16 +122,17 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         "embed_dir": config.embed_dir,
         # different types of OPT subproblems to load
         "embed_opt": config.embed_opt,
-        "flanking": config.opt_flanking,  # does positioning on this node consistute "flanking" the enemy?
+        # does positioning on this node consistute "flanking" the enemy?
+        "flanking": config.opt_flanking,
         "scout_high_ground": config.opt_scout_high_ground,
         "scout_high_ground_relevance": config.opt_scout_high_ground_relevance,
-        "verbose": config.log_on,
+        "verbose": config.verbose,
     }
 
     # set model defaults
     CUSTOM_DEFAULTS = {
         "custom_model": custom_model,
-        # Extra kwargs to be passed to your model"s c"tor.
+        # Extra kwargs to be passed to your model's c'tor.
         "custom_model_config": {
             "map": setup_env.map,
             "nred": env_config["n_red"],
@@ -144,6 +147,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
     }
 
     model_config = CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS
+    batch_size = config.batch_size
     return (
         ppo.PPOConfig()
         .environment(
@@ -153,9 +157,12 @@ def create_trainer(config, trainer_type=None, custom_model=""):
             observation_space=obs_space,
         )
         .framework("torch")
-        .training(lr=config.lr, model=model_config, train_batch_size=800)
-        .resources(num_gpus=torch.cuda.device_count(), num_cpus_per_worker=1)
-        .rollouts(rollout_fragment_length=200)
+        .resources(num_gpus=0.2, num_cpus_per_worker=0.75)
+        .rollouts(
+            rollout_fragment_length="auto",  # if not is_scout else 50,
+            num_rollout_workers=1,
+            # batch_mode="truncate_episodes",
+        )
         .evaluation(
             evaluation_interval=1,
             evaluation_duration_unit="episodes",
@@ -163,7 +170,13 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         )
         .debugging(
             logger_creator=lambda x: custom_log_creator(config.name)(x),
-            log_level="ERROR",
+            log_level="INFO" if config.verbose else "ERROR",
+        )
+        .training(
+            sgd_minibatch_size=batch_size,
+            lr=config.lr,
+            model=model_config,
+            train_batch_size=batch_size,
         )
         .build()
     )
@@ -189,7 +202,6 @@ def train(trainer, model_name, train_time=200, checkpoint_models=True, config=No
 # run baseline tests with a few different algorithms
 def run_baselines(
     config,
-    run_default_baseline_metrics=False,
     train_time=200,
     checkpoint_models=True,
     custom_model="graph_transformer_policy",
@@ -215,6 +227,7 @@ def run_baselines(
 
     trainer = create_trainer(config, trainer_type=ppo, custom_model=custom_model)
     train(trainer, config.name, train_time, checkpoint_models, None)
+    trainer.cleanup()
 
 
 # parse arguments
@@ -293,7 +306,8 @@ def parse_arguments():
     )
     parser.add_argument(
         "--log_on",
-        dest="log_on",
+        "--verbose",
+        dest="verbose",
         action="store_true",
         default=False,
         help="generate verbose logs",
@@ -365,6 +379,7 @@ def parse_arguments():
         "--seed", type=int, default=0, help="seed to use for reproducibility purposes"
     )
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+    parser.add_argument("--batch_size", type=int, default=800, help="batch size")
 
     # graph obs config
     parser.add_argument(
@@ -414,6 +429,13 @@ if __name__ == "__main__":
     config = parse_arguments()
     SEED = config.seed
 
+    # Connect to ray cluster (and start if not started because for some reason ray.init isn't doing that)
+    try:
+        ray.init(log_to_driver=config.verbose)
+    except:
+        os.system("ray start --head --port 6379")
+        ray.init(log_to_driver=config.verbose)
+
     # run models
     run_baselines(
         config,
@@ -421,3 +443,7 @@ if __name__ == "__main__":
         train_time=config.train_time,
         checkpoint_models=False,
     )
+
+    # Disconnect from ray cluster (this should happen automatically, but just in case)
+    torch.cuda.empty_cache()
+    ray.shutdown()

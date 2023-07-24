@@ -2,6 +2,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.env.wrappers.multi_agent_env_compatibility import (
     MultiAgentEnvCompatibility,
 )
+import sys
 
 # from ray.rllib.models.catalog import MODEL_DEFAULTS
 
@@ -76,6 +77,19 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
             all_done = all_done and done[k]
         done["__all__"] = all_done
         truncateds["__all__"] = all_done
+
+        # alter the obs for each individual agent so there's a higher weight at its location
+        for _id in range(self.states.num):
+            _key = self.states.name_list[_id]
+            # print("pre-transformation obs", obs[_key])
+            _current_agent_node_idx = self.agents.gid[_id].at_node - 1
+            # print("agent node:", _current_agent_node_idx)
+
+            # /2 and +0.5 at the proper agent node index ensures all values stay within 0 and 1
+            obs[_key][: self.map.get_graph_size()] /= 2
+            obs[_key][_current_agent_node_idx] += 0.5
+            # print("post-transformation obs", obs[_key])
+        # sys.exit()
 
         # make sure to only report done ids once
         for id in self.done:

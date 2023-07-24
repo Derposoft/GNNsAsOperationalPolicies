@@ -117,6 +117,7 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         seq_lens: TensorType,
     ):
         utils.timeit("start")
+        current_device = next(self.parameters()).device
         obs = input_dict["obs_flat"].float()
         x = input_dict["obs_flat"].float()
         utils.timeit("get obs flat")
@@ -144,18 +145,18 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
                 utils.timeit("embed flanking subproblem")
             if utils.GRAPH_OBS_TOKEN["scout_high_ground"]:
                 opt_high_ground = utils.scout_get_high_ground_embeddings(
-                    len(obs), pos_obs_size
+                    len(obs), pos_obs_size, current_device
                 ).reshape([len(obs), pos_obs_size])
                 x = torch.cat([x, opt_high_ground], dim=-1)
                 utils.timeit("embed HighGround subproblem")
             if utils.GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:
                 opt_high_ground_relevance = (
                     utils.scout_get_high_ground_embeddings_relevance(
-                        obs, self.map
+                        obs, self.map, current_device
                     ).reshape([len(obs), pos_obs_size])
                 )
                 utils.timeit("embed HighGroundRelevance subproblem")
-            x = torch.cat([x, opt_high_ground_relevance], dim=-1)
+                x = torch.cat([x, opt_high_ground_relevance], dim=-1)
 
         obs = x
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
@@ -169,7 +170,8 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
     def value_function(self) -> TensorType:
         assert self._features is not None, "must call forward() first"
         if not self._value_branch:
-            return torch.Tensor([0] * len(self._features))
+            current_device = next(self.parameters()).device
+            return torch.Tensor([0] * len(self._features)).to(current_device)
         if self._value_branch_separate:
             return self._value_branch(
                 self._value_branch_separate(self._last_flat_in)

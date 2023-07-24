@@ -137,8 +137,8 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         produce debug output and ensure that model is on right device
         """
         utils.count_model_params(self, print_model=True)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.to(self.device)
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.to(self.device)
 
     @override(TMv2.TorchModelV2)
     def forward(
@@ -150,43 +150,58 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         utils.timeit("start")
 
         # transform obs to graph (for pyG, also do list[data]->torch_geometric.Batch)
-        obs = input_dict["obs_flat"].float()
-        utils.timeit("obs to float")
-
-        x = utils.scout_embed_obs_in_map(obs, self.map)
+        obs = input_dict["obs_flat"].float()  # .to(self.device)
+        utils.timeit(f"obs to float -- {len(obs)}")
+        utils.check_device(self, "POLICY_MODEL")
+        utils.check_device(obs, "obs")
+        current_device = next(self.parameters()).device
+        x = utils.scout_embed_obs_in_map(obs, self.map, current_device)
         batch_size = x.shape[0]
         graph_size = x.shape[1]
         utils.timeit("scout embed obs")
 
-        agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
-        utils.timeit("get agent nodes")
+        # agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
+        # utils.timeit("get agent nodes")
+
+        agent_nodes_new = (obs[:, : self.map.get_graph_size()] == 2).nonzero()
+        assert len(obs) == len(agent_nodes_new) or len(agent_nodes_new) == 0
+        utils.timeit("get agent nodes new")
 
         # inference
+        self.adjacency = self.adjacency.to(current_device)
         if self.conv_type == "gat":
             graph = Batch.from_data_list([GraphData(_x, self.adjacency) for _x in x])
             x, batch_adjacency = graph.x, graph.edge_index
             utils.timeit("batching")
 
         for conv, norm in zip(self.gats, self.norms):
+            utils.check_device(conv, "convs")
+            utils.check_device(x, "x_for_convs")
             if self.conv_type == "gcn":
                 x = conv(x, self.adjacency)
             else:
+                utils.check_device(batch_adjacency, "adj_for_convs")
                 x = conv(x, batch_adjacency)  # batching=8.9ms, convs=26.3ms
                 # x = torch.stack([conv(_x, self.adjacency) for _x in x], dim=0) # 180-190ms
+
             if self.layernorm:
                 x = norm(x)
         utils.timeit("gnn convs")
 
         x = x.reshape([batch_size, graph_size, -1])
-        self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes)
+        self._features = self.aggregator(x, self.adjacency, agent_nodes=agent_nodes_new)
         utils.timeit("convs")
 
+        utils.check_device(self._features, "features")
+        utils.check_device(self._hiddens, "hiddens")
         if self.is_hybrid:
             self._features = self._hiddens(torch.cat([self._features, obs], dim=1))
             utils.timeit("hybrid section")
 
         logits = self._logits(self._features)
-        utils.timeit("get logsits")
+        utils.timeit("get logits")
+        utils.check_device(logits, "logits")
+        utils.check_device(self._logits, "_logits_layer")
 
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
@@ -197,7 +212,8 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
     def value_function(self):
         assert self._features is not None, "must call forward() first"
         if not self._value_branch:
-            return torch.Tensor([0] * len(self._features))
+            current_device = next(self.parameters()).device
+            return torch.Tensor([0] * len(self._features)).to(current_device)
         if self._value_branch_separate:
             return self._value_branch(
                 self._value_branch_separate(self._last_flat_in)
