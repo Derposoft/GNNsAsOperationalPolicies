@@ -53,7 +53,9 @@ def create_env_config(config):
         "init_red": config.init_red,
         "init_blue": config.init_blue,
         "init_health_red": config.init_health,
-        "init_health_blue": config.init_health,
+        # "init_health_blue": config.init_health,
+        "health_red": config.init_health,
+        # "health_blue": config.init_health,
         "obs_embed": config.obs_embed,
         "obs_dir": config.obs_dir,
         "obs_team": config.obs_team,
@@ -431,10 +433,10 @@ if __name__ == "__main__":
 
     # Connect to ray cluster (and start if not started because for some reason ray.init isn't doing that)
     try:
-        ray.init(log_to_driver=config.verbose)
+        ray.init(address="auto")
     except:
-        os.system("ray start --head --port 6379")
-        ray.init(log_to_driver=config.verbose)
+        os.system(f"ray start --head")
+        ray.init(log_to_driver=config.verbose, address="auto")
 
     # run models
     run_baselines(
