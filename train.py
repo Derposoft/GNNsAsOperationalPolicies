@@ -84,7 +84,7 @@ def create_env_config(config):
 
 
 # store tb logs in custom named dir
-def custom_log_creator(log_name, custom_dir="~/ray_results"):
+def custom_log_creator(log_name, custom_dir="~/gpu_ray_results"):
     # https://stackoverflow.com/questions/62241261/change-logdir-of-ray-rllib-training-instead-of-ray-results
     custom_path = os.path.expanduser(custom_dir)
     log_name += "_"
@@ -157,7 +157,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
             observation_space=obs_space,
         )
         .framework("torch")
-        .resources(num_gpus=0.2, num_cpus_per_worker=0.75)
+        .resources(num_gpus=2, num_cpus_per_worker=2)
         .rollouts(
             rollout_fragment_length="auto",  # if not is_scout else 50,
             num_rollout_workers=1,
@@ -342,6 +342,10 @@ def parse_arguments():
             "fc_scout",
             "gnn_scout",
             "gt_scout",
+            "two_gnn_direct_scout",
+            "gnn_direct_scout",
+            "global_hybrid",
+            "correlated_gnn_scout"
         ],
     )
     parser.add_argument(

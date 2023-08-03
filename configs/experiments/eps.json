@@ -1,0 +1,9 @@
+{
+    "gcnscout_200h2.2l_2r2b_NOOPT": {
+        "n_red": 2,
+        "n_blue": 2,
+        "model": "gnn_scout",
+        "hidden_size": 200,
+        "conv_type": "gcn"
+    }
+}

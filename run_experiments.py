@@ -27,7 +27,7 @@ START_SEED = 0
 TRAIN_TIME = 75  # equivalent to 60k eps. scout env models tend to plateau at ~50k and skirmish at ~30-40k (?)
 
 # read experiments.json
-with open("configs/experiments/experiments.json", "r") as f:
+with open("configs/experiments/experiments_policy.json", "r") as f:
     experiments = json.load(f)
 
 # turn experiments in json into cmdline commands
