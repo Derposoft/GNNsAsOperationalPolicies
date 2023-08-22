@@ -13,22 +13,35 @@ import os
 
 # our code
 from sigma_graph.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
+from graph_scout.envs.base.env_scout_mission_rllib import ScoutMissionStdRLLib
+
 import model  # THIS NEEDS TO BE HERE IN ORDER TO RUN __init__.py!
 from train import (
     create_env_config,
-    create_trainer_config,
+    # create_trainer_config,
     parse_arguments,
     custom_log_creator,
+    create_trainer,
 )
 
 # algorithms to test
-from ray.rllib.agents import ppo
+from ray.rllib.algorithms import ppo
+from ray.rllib.algorithms.algorithm import Algorithm
 
 
-def restore_trainer(checkpoint_path, config):
+def restore_trainer_scout(checkpoint_path, config) -> Algorithm:
+    trainer: Algorithm = create_trainer(config, trainer_type=ppo)
+    print("trainer created")
+    trainer.restore(checkpoint_path)
+    print("RESTORED TRAINER!")
+    return trainer
+
+
+def restore_trainer(checkpoint_path, config) -> Algorithm:
     """
     https://docs.ray.io/en/latest/serve/tutorials/rllib.html
     """
+    trainer = create_trainer(config, trainer_type=ppo)
     config["log_level"] = "ERROR"
     trainer = ppo.PPOTrainer(
         config,
@@ -45,8 +58,13 @@ def run_tests(config):
     runs a set of tests on the models
     """
     # initialize env
-    outer_config, _ = create_env_config(config)
-    test_env = Figure8SquadRLLib(outer_config)
+    is_scout = "scout" in config.model
+    outer_config = create_env_config(config)
+    test_env = (
+        Figure8SquadRLLib(outer_config)
+        if not is_scout
+        else ScoutMissionStdRLLib(outer_config)
+    )
     policy_file = {}
     if config.policy_file != "":
         with open(config.policy_file) as f:
@@ -65,9 +83,15 @@ def run_tests(config):
         print(f"########## model at: {model_dir} ##########")
         with open(model_dir + "/config.pkl", "rb") as f:
             trainer_config = pickle.load(f)
+            # print(trainer_config)
         with open(model_dir + "/checkpoint_path.txt", "r") as f:
             checkpoint_path = f.readlines()[0].lstrip().rstrip()
-        trainer = restore_trainer(checkpoint_path, trainer_config)
+        if is_scout:
+            trainer = restore_trainer_scout(
+                checkpoint_path, config
+            )  # , trainer_config)
+        else:
+            trainer = restore_trainer(checkpoint_path, trainer_config)
         print("restored")
         # test all possible starting locations for red and print policy for each of location
         tot_rew_across_all = {}
@@ -95,6 +119,10 @@ def run_tests(config):
                         str(agent) in policy_file
                         and str(i + 1) in policy_file[str(agent)]
                     ):
+                        if is_scout:
+                            raise Exception(
+                                "policy_file not supported with scout because i don't have time"
+                            )
                         ax_ni_policy = policy_file[str(agent)][str(i + 1)]
                         if step < len(ax_ni_policy):
                             agent_action = Figure8SquadRLLib.convert_multidiscrete_action_to_discrete(

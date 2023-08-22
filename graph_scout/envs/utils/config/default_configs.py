@@ -45,9 +45,9 @@ init_setup = {
             },
         },
         "engage_range": {
-            3: {"dist": 50, "prob_add": 0.10, "prob_mul": 1.0},
-            2: {"dist": 150, "prob_add": 0.05, "prob_mul": 1.0},
-            1: {"dist": 300, "prob_add": 0.01, "prob_mul": 1.0},
+            3: {"dist": 50, "prob_add": 0.10, "prob_mul": 0.8},
+            2: {"dist": 150, "prob_add": 0.05, "prob_mul": 0.7},
+            1: {"dist": 300, "prob_add": 0.01, "prob_mul": 0.6},
         },
         "engage_token": {
             0: "none-visible",

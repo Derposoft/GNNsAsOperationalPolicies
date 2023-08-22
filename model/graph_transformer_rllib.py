@@ -1,40 +1,33 @@
 """
 base class from https://github.com/ray-project/ray/blob/master/rllib/models/torch/fcnet.py
+policy: this is a "hybrid model" which has one part FC and one part graph transformer for a policy
+value: standard FC value
+
+# params: 95328
 """
 # RL/AI imports
-import time
 import ray.rllib.models.torch.torch_modelv2 as TMv2
-from ray.rllib.models.torch.misc import SlimFC, normc_initializer  # AppendBiasLayer, \
+from ray.rllib.models.torch.misc import SlimFC, normc_initializer
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
 import torch.nn as nn
 import torch
 import gymnasium as gym
 import dgl
-import networkx as nx
 
 # our code imports
 from sigma_graph.data.graph.skirmish_graph import MapInfo
 from sigma_graph.envs.figure8 import default_setup as env_setup
-from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP
-from sigma_graph.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
 from model.graph_transformer_model import (
     initialize_train_artifacts as initialize_graph_transformer,
 )
 import model.utils as utils
 
-# 3rd party library imports (s2v, attention model rdkit, etc?)
-# from attention_study.model.s2v.s2v_graph import S2VGraph
-# from attention_study.gnn_libraries.s2v.embedding import EmbedMeanField, EmbedLoopyBP
-# from attention_routing.nets.attention_model import AttentionModel
-# from attention_routing.problems.tsp.problem_tsp import TSP
-
 # other imports
 import numpy as np
-import sys
 
 
-class GraphTransformerPolicy(TMv2.TorchModelV2, nn.Module):
+class HybridPolicy(TMv2.TorchModelV2, nn.Module):
     def __init__(
         self,
         obs_space: gym.spaces.Space,
@@ -49,8 +42,6 @@ class GraphTransformerPolicy(TMv2.TorchModelV2, nn.Module):
             self, obs_space, action_space, num_outputs, model_config, name
         )
         nn.Module.__init__(self)
-        # torch.autograd.anomaly_mode.set_detect_anomaly(True)
-
         # config
         hiddens = list(model_config.get("fcnet_hiddens", [])) + list(
             model_config.get("post_fcnet_hiddens", [])
@@ -63,10 +54,12 @@ class GraphTransformerPolicy(TMv2.TorchModelV2, nn.Module):
         self.free_log_std = model_config.get(
             "free_log_std"
         )  # skip worrying about log std
+        # self.use_mean_embed = kwargs["use_mean_embed"] # obs information
         self.map = map
         self.num_red = kwargs["nred"]
         self.num_blue = kwargs["nblue"]
         self.aggregation_fn = kwargs["aggregation_fn"]
+        self.hidden_size = kwargs["hidden_size"]
         self_shape, blue_shape, red_shape = env_setup.get_state_shapes(
             self.map.get_graph_size(), self.num_red, self.num_blue, env_setup.OBS_TOKEN
         )
@@ -77,34 +70,40 @@ class GraphTransformerPolicy(TMv2.TorchModelV2, nn.Module):
             self.num_red,
             self.num_blue,
         ]
-        # self.map.g_acs.add_node(0) # dummy node that we"ll use later
-        print("GT AGG FN", self.aggregation_fn)
+
+        """
+        self.hidden_proj_sizes = [45, 45]
+        self.GAT_LAYERS = 4
+        self.N_HEADS = 4
+        self.HIDDEN_DIM = 4
+        """
+        # self.hidden_proj_sizes = [150, 150]
+        self.hiddens = [self.hidden_size, self.hidden_size]
+        # self.hidden_proj_sizes = [177, 177]
+        self.GAT_LAYERS = 4
+        self.N_HEADS = 4
+        self.HIDDEN_DIM = 4
 
         # map info
-        self.move_map = (
-            {}
-        )  # movement dictionary: d[node][direction] = newnode. newnode is -1 if direction is not possible from node
-        for n in self.map.g_acs.adj:
-            self.move_map[n] = {}
-            ms = self.map.g_acs.adj[n]
-            for m in ms:
-                dir = ms[m]["action"]
-                self.move_map[n][dir] = m
+        self.move_map = utils.create_move_map(map.g_acs)
 
-        # actor (attention model)
-        self.GAT_LAYERS = 8
-        self.N_HEADS = 4
-        self.HIDDEN_DIM = 20
+        # policy -- gats and mlp
         self.gats, _, _ = initialize_graph_transformer(
             utils.NODE_EMBED_SIZE,
+            aggregation_fn=self.aggregation_fn,
             L=self.GAT_LAYERS,
             n_heads=self.N_HEADS,
             hidden_dim=self.HIDDEN_DIM,
             out_dim=self.HIDDEN_DIM,
-            aggregation_fn=self.aggregation_fn,
         )
-
-        # critic
+        self._hiddens, self._logits = utils.create_policy_fc(
+            hiddens=self.hiddens,
+            activation=activation,
+            num_outputs=num_outputs,
+            no_final_linear=no_final_linear,
+            num_inputs=int(np.product(obs_space.shape)) + self.gats.num_actions,
+        )
+        # value
         self._value_branch, self._value_branch_separate = utils.create_value_branch(
             num_inputs=int(np.product(obs_space.shape)),
             num_outputs=num_outputs,
@@ -130,6 +129,8 @@ class GraphTransformerPolicy(TMv2.TorchModelV2, nn.Module):
     ):
         # start_time = time.time()
         obs = input_dict["obs_flat"].float()
+        current_device = next(self.parameters()).device
+
         # transform obs to graph
         attention_input = utils.efficient_embed_obs_in_map(
             obs, self.map, self.obs_shapes
@@ -150,9 +151,9 @@ class GraphTransformerPolicy(TMv2.TorchModelV2, nn.Module):
         )
 
         # inference
-        batch_x = batch_graphs.ndata["feat"]  # , None #batch_graphs.edata["feat"]
+        batch_x = batch_graphs.ndata["feat"]
         batch_e, batch_lap_enc, batch_wl_pos_enc = None, None, None
-        logits = self.gats.forward(
+        gat_output = self.gats(
             batch_graphs,
             batch_x,
             batch_e,
@@ -161,16 +162,19 @@ class GraphTransformerPolicy(TMv2.TorchModelV2, nn.Module):
             agent_nodes,
             self.move_map,
         )
+        self._features = self._hiddens(torch.cat([gat_output, obs], dim=1))
 
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
-        self._features = logits
+        logits = self._logits(self._features)
         # print("forward takes", time.time()-start_time)
         return logits, state
 
     @override(TMv2.TorchModelV2)
     def value_function(self):
         assert self._features is not None, "must call forward() first"
+        if not self._value_branch:
+            return torch.Tensor([0] * len(self._features))
         if self._value_branch_separate:
             return self._value_branch(
                 self._value_branch_separate(self._last_flat_in)

@@ -10,13 +10,15 @@ import ray.rllib.models.torch.torch_modelv2 as TMv2
 from ray.rllib.models.torch.misc import SlimFC, normc_initializer
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import Dict, TensorType, List, ModelConfigDict
+import time
 import torch.nn as nn
 import torch
 import gymnasium as gym
 import dgl
 
 # our code imports
-from sigma_graph.data.graph.skirmish_graph import MapInfo
+# from sigma_graph.data.graph.skirmish_graph import MapInfo
+from graph_scout.envs.data.terrain_graph import MapInfo
 from sigma_graph.envs.figure8 import default_setup as env_setup
 from model.graph_transformer_model import (
     initialize_train_artifacts as initialize_graph_transformer,
@@ -27,7 +29,7 @@ import model.utils as utils
 import numpy as np
 
 
-class HybridPolicy(TMv2.TorchModelV2, nn.Module):
+class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
     def __init__(
         self,
         obs_space: gym.spaces.Space,
@@ -70,6 +72,7 @@ class HybridPolicy(TMv2.TorchModelV2, nn.Module):
             self.num_red,
             self.num_blue,
         ]
+        utils.set_obs_token(kwargs.get("graph_obs_token", {}))
 
         """
         self.hidden_proj_sizes = [45, 45]
@@ -85,11 +88,11 @@ class HybridPolicy(TMv2.TorchModelV2, nn.Module):
         self.HIDDEN_DIM = 4
 
         # map info
-        self.move_map = utils.create_move_map(map.g_acs)
+        self.move_map = utils.create_move_map(map.g_move)
 
         # policy -- gats and mlp
         self.gats, _, _ = initialize_graph_transformer(
-            utils.NODE_EMBED_SIZE,
+            utils.SCOUT_NODE_EMBED_SIZE,
             aggregation_fn=self.aggregation_fn,
             L=self.GAT_LAYERS,
             n_heads=self.N_HEADS,
@@ -103,6 +106,7 @@ class HybridPolicy(TMv2.TorchModelV2, nn.Module):
             no_final_linear=no_final_linear,
             num_inputs=int(np.product(obs_space.shape)) + self.gats.num_actions,
         )
+        # utils.count_model_params(self._hiddens)
         # value
         self._value_branch, self._value_branch_separate = utils.create_value_branch(
             num_inputs=int(np.product(obs_space.shape)),
@@ -115,9 +119,9 @@ class HybridPolicy(TMv2.TorchModelV2, nn.Module):
         self._features = None
         self._last_flat_in = None
 
-        utils.count_model_params(self, print_model=True)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.to(self.device)
+        utils.count_model_params(self)  # , print_model=True) # do we need these prints
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.to(self.device)
         self.cache = {}  # minor speedup (~15%) of training
 
     @override(TMv2.TorchModelV2)
@@ -129,23 +133,24 @@ class HybridPolicy(TMv2.TorchModelV2, nn.Module):
     ):
         # start_time = time.time()
         obs = input_dict["obs_flat"].float()
+        current_device = next(self.parameters()).device
+        utils.check_device(obs, "obs")
+
         # transform obs to graph
-        attention_input = utils.efficient_embed_obs_in_map(
-            obs, self.map, self.obs_shapes
-        )
+        attention_input = utils.scout_embed_obs_in_map(obs, self.map, current_device)
         agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
 
         if len(obs) not in self.cache:
             batch_graphs = []
             for i in range(len(obs)):
-                batch_graphs.append(dgl.from_networkx(self.map.g_acs))
+                batch_graphs.append(dgl.from_networkx(self.map.g_move))
             batch_graphs = dgl.batch(batch_graphs)
-            batch_graphs = batch_graphs.to(self.device)
+            batch_graphs = batch_graphs.to(current_device)
             self.cache[len(obs)] = batch_graphs.clone()
         else:
             batch_graphs = self.cache[len(obs)].clone()
         batch_graphs.ndata["feat"] = attention_input.reshape(
-            [-1, utils.NODE_EMBED_SIZE]
+            [-1, utils.SCOUT_NODE_EMBED_SIZE]
         )
 
         # inference
@@ -161,18 +166,22 @@ class HybridPolicy(TMv2.TorchModelV2, nn.Module):
             self.move_map,
         )
         self._features = self._hiddens(torch.cat([gat_output, obs], dim=1))
+        utils.check_device(self._features, "features")
+        utils.check_device(self._hiddens, "hiddens")
 
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
         logits = self._logits(self._features)
-        # print("forward takes", time.time()-start_time)
+        # print("forward takes", time.time() - start_time)
+        utils.check_device(logits, "logits")
         return logits, state
 
     @override(TMv2.TorchModelV2)
     def value_function(self):
         assert self._features is not None, "must call forward() first"
         if not self._value_branch:
-            return torch.Tensor([0] * len(self._features))
+            current_device = next(self.parameters()).device
+            return torch.Tensor([0] * len(self._features)).to(current_device)
         if self._value_branch_separate:
             return self._value_branch(
                 self._value_branch_separate(self._last_flat_in)

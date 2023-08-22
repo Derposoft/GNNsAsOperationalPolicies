@@ -3,9 +3,10 @@ from ray.rllib.models.catalog import ModelCatalog
 from model.gnn_rllib import GNNPolicy
 
 from model.gnn_rllib_scout import GNNScoutPolicy
-from model.graph_transformer_rllib import GraphTransformerPolicy
-from model.hybrid_rllib import HybridPolicy
-from model.hybrid_rllib_scout import HybridScoutPolicy
+
+# from model.DEPRECATED_graph_transformer_rllib import GraphTransformerPolicy
+from model.graph_transformer_rllib import HybridPolicy
+from model.graph_transformer_rllib_scout import HybridScoutPolicy
 from model.fc_rllib import FCPolicy
 from model.fc_rllib_scout import FCScoutPolicy
 
@@ -13,7 +14,7 @@ from model.fc_rllib_scout import FCScoutPolicy
 # https://docs.ray.io/en/latest/rllib-models.html#customizing-preprocessors-and-models
 ModelCatalog.register_custom_model("gnn_policy", GNNPolicy)
 ModelCatalog.register_custom_model("gnn_scout_policy", GNNScoutPolicy)
-ModelCatalog.register_custom_model("graph_transformer_policy", GraphTransformerPolicy)
+# ModelCatalog.register_custom_model("graph_transformer_policy", GraphTransformerPolicy)
 ModelCatalog.register_custom_model("hybrid_policy", HybridPolicy)
 ModelCatalog.register_custom_model("hybrid_scout_policy", HybridScoutPolicy)
 ModelCatalog.register_custom_model("gt_policy", HybridPolicy)
