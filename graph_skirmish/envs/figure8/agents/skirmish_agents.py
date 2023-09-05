@@ -1,4 +1,4 @@
-from sigma_graph.envs.utils.multiagent_agent_base import MAgent
+from graph_skirmish.envs.utils.multiagent_agent_base import MAgent
 
 
 class AgentRed(MAgent):
@@ -21,7 +21,17 @@ class AgentRed(MAgent):
 
 
 class AgentBlue(MAgent):
-    def __init__(self, _uid=0, _node=0, _code=None, _dir=0, _health=0, _learn=False, _route=None, _index=None):
+    def __init__(
+        self,
+        _uid=0,
+        _node=0,
+        _code=None,
+        _dir=0,
+        _health=0,
+        _learn=False,
+        _route=None,
+        _index=None,
+    ):
         super().__init__(_uid, _node, _code, _dir, _health, _learn)
         self.route_ptr = _route
         self.route_idx = _index

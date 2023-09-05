@@ -20,11 +20,11 @@ import numpy as np
 import random
 
 # our code
-from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP, TURN_90_LOOKUP
-from sigma_graph.envs.figure8.default_setup import OBS_TOKEN
-from sigma_graph.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
+from graph_skirmish.envs.figure8.action_lookup import MOVE_LOOKUP, TURN_90_LOOKUP
+from graph_skirmish.envs.figure8.default_setup import OBS_TOKEN
+from graph_skirmish.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
 from graph_scout.envs.base import ScoutMissionStdRLLib
-import sigma_graph.envs.figure8.default_setup as default_setup
+import graph_skirmish.envs.figure8.default_setup as default_setup
 import model  # THIS NEEDS TO BE HERE IN ORDER TO RUN __init__.py!
 import model.utils as utils
 

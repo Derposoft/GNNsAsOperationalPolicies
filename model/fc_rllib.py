@@ -25,7 +25,7 @@ import torch.nn as nn
 import torch
 
 # our code imports
-from sigma_graph.data.graph.skirmish_graph import MapInfo
+from graph_skirmish.data.graph.skirmish_graph import MapInfo
 import model.utils as utils
 
 # other imports

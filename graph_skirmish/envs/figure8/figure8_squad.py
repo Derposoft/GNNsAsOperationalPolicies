@@ -3,13 +3,13 @@ import numpy as np
 import gymnasium as gym
 import gymnasium.spaces as spaces
 
-from sigma_graph.data.file_manager import (
+from graph_skirmish.data.file_manager import (
     load_graph_files,
     save_log_2_file,
     log_done_reward,
 )
-from sigma_graph.data.graph.skirmish_graph import MapInfo
-from sigma_graph.data.data_helper import get_emb_from_name
+from graph_skirmish.data.graph.skirmish_graph import MapInfo
+from graph_skirmish.data.data_helper import get_emb_from_name
 
 from ..utils.multiagent_space import ActionSpaces, ObservationSpaces
 from .agents.skirmish_agents import AgentRed, AgentBlue

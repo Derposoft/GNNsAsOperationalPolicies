@@ -14,10 +14,10 @@ import dgl
 import networkx as nx
 
 # our code imports
-from sigma_graph.data.graph.skirmish_graph import MapInfo
-from sigma_graph.envs.figure8 import default_setup as env_setup
-from sigma_graph.envs.figure8.action_lookup import MOVE_LOOKUP
-from sigma_graph.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
+from graph_skirmish.data.graph.skirmish_graph import MapInfo
+from graph_skirmish.envs.figure8 import default_setup as env_setup
+from graph_skirmish.envs.figure8.action_lookup import MOVE_LOOKUP
+from graph_skirmish.envs.figure8.figure8_squad_rllib import Figure8SquadRLLib
 from model.graph_transformer_model import (
     initialize_train_artifacts as initialize_graph_transformer,
 )

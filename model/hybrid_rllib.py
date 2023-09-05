@@ -16,8 +16,8 @@ import gymnasium as gym
 import dgl
 
 # our code imports
-from sigma_graph.data.graph.skirmish_graph import MapInfo
-from sigma_graph.envs.figure8 import default_setup as env_setup
+from graph_skirmish.data.graph.skirmish_graph import MapInfo
+from graph_skirmish.envs.figure8 import default_setup as env_setup
 from model.graph_transformer_model import (
     initialize_train_artifacts as initialize_graph_transformer,
 )

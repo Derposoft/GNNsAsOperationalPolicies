@@ -3,7 +3,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.models.catalog import MODEL_DEFAULTS
 import numpy as np
 
-from sigma_graph.envs.figure8.figure8_squad import Figure8Squad
+from graph_skirmish.envs.figure8.figure8_squad import Figure8Squad
 from . import default_setup as env_setup
 
 local_action_move = env_setup.act.MOVE_LOOKUP

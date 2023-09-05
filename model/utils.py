@@ -19,9 +19,9 @@ from typing import Union
 
 from graph_scout.envs.data.terrain_graph import MapInfo as ScoutMapInfo
 from graph_scout.envs.utils.config import default_configs as scout_config
-import sigma_graph.envs.figure8.default_setup as env_setup
-from sigma_graph.envs.figure8 import action_lookup
-from sigma_graph.data.graph.skirmish_graph import MapInfo as Fig8MapInfo
+import graph_skirmish.envs.figure8.default_setup as env_setup
+from graph_skirmish.envs.figure8 import action_lookup
+from graph_skirmish.data.graph.skirmish_graph import MapInfo as Fig8MapInfo
 
 # constants/helper functions
 VALUE_HIDDENS = [175, 175]
