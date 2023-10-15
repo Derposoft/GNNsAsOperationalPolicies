@@ -15,6 +15,8 @@ except:
 
 import argparse
 import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
 import pickle
 import torch
 import ray

@@ -1,4 +1,4 @@
-from collections import deque
+from collections import deque, defaultdict
 import sys
 import numpy as np
 import heapq
@@ -12,12 +12,14 @@ import torch
 from torch_geometric.nn.aggr import Aggregation
 import torch_geometric.nn.aggr as aggr
 import torch_geometric.nn.pool as pool
-from typing import List
+from typing import Any, List
 from functools import lru_cache
 import os
 from typing import Union
 
+from train import create_env_config
 from graph_scout.envs.data.terrain_graph import MapInfo as ScoutMapInfo
+from graph_scout.envs.base import ScoutMissionStdRLLib
 from graph_scout.envs.utils.config import default_configs as scout_config
 import sigma_graph.envs.figure8.default_setup as env_setup
 from sigma_graph.envs.figure8 import action_lookup
@@ -108,6 +110,62 @@ def set_obs_token(OBS_TOKEN):
 
 
 @lru_cache(maxsize=None)
+def scout_get_advantage_points(
+    threshold: float = 0.9,
+    min_expected_advantage_points: int = 5,
+):
+    """# Dummy cli config that we can pass to an environment
+    class DefaultNamespace:
+        def __getattribute__(self, __name: str) -> Any:
+            default_config = {
+                "env_path": ".",
+                "act_masked": False,
+                "n_red": 2,
+                "n_blue": 2,
+            }
+            return default_config.get(__name, 0)
+
+    cli_config = DefaultNamespace()
+    env_config = create_env_config(cli_config)
+    scout_env = ScoutMissionStdRLLib(env_config)
+    #scout_map = scout_env.map"""
+    scout_map = scout_map_info
+    vis_map = scout_map.g_view
+    advantage_points = set()
+    for u in vis_map.adj:
+        for v in vis_map.adj[u]:
+            edge = vis_map.adj[u][v]
+            for position in edge:
+                stats = edge[position]
+                prob = stats["prob"]
+                if prob > threshold:
+                    advantage_points.add((u, v))
+    assert len(advantage_points) > min_expected_advantage_points
+    return advantage_points
+
+
+@lru_cache(maxsize=None)
+def scout_get_advantage_embeddings_NEW(
+    batch_size: int,
+    pos_obs_size: int,
+    device=None,
+):
+    """
+    finds the advantageous points by filtering point pairs with a shooting probability
+    value greater than the given threshold.
+    """
+
+    # TODO take into account v as well as u...?
+    advantage_points = scout_get_advantage_points()
+    extra_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
+    for u, v in advantage_points:
+        extra_node_embeddings[:, u, -1] = 1
+    if device:
+        extra_node_embeddings = extra_node_embeddings.to(device)
+    return extra_node_embeddings
+
+
+@lru_cache(maxsize=None)
 def scout_get_high_ground_embeddings(batch_size: int, pos_obs_size: int, device=None):
     """
     :param batch_size: batch size of input to create embeddings for
@@ -155,9 +213,10 @@ def scout_compute_relevance_heuristic_for_waypoint(blue_positions: torch.Tensor)
 
     relevances = {}
     # list of (u, v, [directions]) for advantaged locations from u to v
-    high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
+    # high_ground_points = scout_config.init_setup["LOCAL_CONTENT"]["imbalance_pairs"]
+    high_ground_points = scout_get_advantage_points()
     blue_locations = list(blue_positions.cpu().numpy())
-    for u, v, dirs in high_ground_points:
+    for u, v in high_ground_points:
         # perform a search from high ground point's advantage point pair to the closest blue
         # print(v)
         # print(blue_locations)
@@ -258,9 +317,12 @@ def scout_embed_obs_in_map(obs: torch.Tensor, map: ScoutMapInfo, device=None):
     # embed graph subproblem-esque optimization into node embeddings
     if GRAPH_OBS_TOKEN["embed_opt"]:
         if GRAPH_OBS_TOKEN["scout_high_ground"]:
-            hg_node_embeddings = scout_get_high_ground_embeddings(
+            hg_node_embeddings = scout_get_advantage_embeddings_NEW(
                 batch_size, pos_obs_size, device
             )
+            # hg_node_embeddings = scout_get_high_ground_embeddings(
+            #    batch_size, pos_obs_size, device
+            # )
             node_embeddings = torch.cat([node_embeddings, hg_node_embeddings], dim=-1)
             timeit("high ground embedding")
         if GRAPH_OBS_TOKEN["scout_high_ground_relevance"]:

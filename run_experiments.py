@@ -23,7 +23,7 @@ import argparse
 import ray._private.services as services
 
 N_PROCS = 10  # multiprocessing.cpu_count() // 2
-N_CPUS = 20
+N_CPUS = 40
 N_SEEDS = 10
 START_SEED = 0
 TRAIN_TIME = 75  # equivalent to 60k eps. scout env models tend to plateau at ~50k and skirmish at ~30-40k (?)
@@ -50,7 +50,9 @@ if __name__ == "__main__":
 
     # start ray cluster
     port = config.port
-    os.system(f"ray start --head --port={port} --num-cpus={N_CPUS} --num-gpus=7")
+    os.system(
+        f"CUDA_VISIBLE_DEVICES=4,5,6,7 ray start --head --port={port} --num-cpus={N_CPUS} --num-gpus=4"
+    )
 
     # read experiments.json
     with open("configs/experiments/experiments.json", "r") as f:
