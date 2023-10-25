@@ -111,34 +111,28 @@ def set_obs_token(OBS_TOKEN):
 
 @lru_cache(maxsize=None)
 def scout_get_advantage_points(
-    threshold: float = 0.9,
+    threshold: float = 0.75,
     min_expected_advantage_points: int = 5,
 ):
-    """# Dummy cli config that we can pass to an environment
-    class DefaultNamespace:
-        def __getattribute__(self, __name: str) -> Any:
-            default_config = {
-                "env_path": ".",
-                "act_masked": False,
-                "n_red": 2,
-                "n_blue": 2,
-            }
-            return default_config.get(__name, 0)
-
-    cli_config = DefaultNamespace()
-    env_config = create_env_config(cli_config)
-    scout_env = ScoutMissionStdRLLib(env_config)
-    #scout_map = scout_env.map"""
+    """Calculate the advantage that each point has relative to other points. 0.75 threshold
+    should lead to 10 advantage points."""
     scout_map = scout_map_info
     vis_map = scout_map.g_view
     advantage_points = set()
     for u in vis_map.adj:
         for v in vis_map.adj[u]:
-            edge = vis_map.adj[u][v]
-            for position in edge:
-                stats = edge[position]
-                prob = stats["prob"]
-                if prob > threshold:
+            edge_uv = vis_map.adj[u][v]
+            for position in edge_uv:
+                stats_uv = edge_uv[position]
+                prob_uv = stats_uv["prob"]
+                prob_vu = 0
+                if v in vis_map.adj and u in vis_map.adj[v]:
+                    edge_vu = vis_map[v][u]
+                    for position_vu in edge_vu:
+                        stats_vu = edge_vu[position_vu]
+                        prob_vu = max(prob_vu, stats_vu["prob"])
+                advantage = prob_uv - prob_vu
+                if advantage > threshold:
                     advantage_points.add((u, v))
     assert len(advantage_points) > min_expected_advantage_points
     return advantage_points
@@ -163,6 +157,28 @@ def scout_get_advantage_embeddings_NEW(
     if device:
         extra_node_embeddings = extra_node_embeddings.to(device)
     return extra_node_embeddings
+
+
+hgr_embeddings_base_new = None
+
+
+@lru_cache(maxsize=None)
+def scout_get_advantage_relevance_embeddings_NEW(batch_size: int, pos_obs_size: int):
+    """
+    Calculates P_u(hit)_t = sum_v P(enemy on v | enemy on v' at t-a) P(hit from u to v)
+    for all u, given the positions of blue agents.
+    """
+    # create extra node embeddings to add to
+    global hgr_embeddings_base_new
+    if (
+        hgr_embeddings_base_new == None
+        or hgr_embeddings_base_new.shape[0] != batch_size
+    ):
+        hg_relevance_node_embeddings = torch.zeros([batch_size, pos_obs_size, 1])
+        hgr_embeddings_base_new = hg_relevance_node_embeddings
+    else:
+        hg_relevance_node_embeddings = hgr_embeddings_base_new
+    # scout_map_info.g_view
 
 
 @lru_cache(maxsize=None)
