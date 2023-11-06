@@ -2,11 +2,25 @@ from graph_scout.envs.utils.agent.multiagent_base import GSMAgent
 
 
 class AgentHeur(GSMAgent):
-    def __init__(self, global_id=1, name="B0", team_id=1, node=0,
-                 motion=-1, direction=0, posture=0, health=100, _death=False,
-                 path=None, index=0, slow_level=4, wait_steps=1):
-        super().__init__(global_id, name, team_id, node,
-                         motion, direction, posture, health, _death)
+    def __init__(
+        self,
+        global_id=1,
+        name="B0",
+        team_id=1,
+        node=0,
+        motion=-1,
+        direction=0,
+        posture=0,
+        health=100,
+        _death=False,
+        path=None,
+        index=0,
+        slow_level=4,
+        wait_steps=1,
+    ):
+        super().__init__(
+            global_id, name, team_id, node, motion, direction, posture, health, _death
+        )
         # pre-designed route and the pointer for current location
         self.index = index
         self.route = path
@@ -126,7 +140,10 @@ class AgentHeur(GSMAgent):
 
     # fast accessing current & next node. boundary checks: self.index != max
     def get_node_now_and_next(self):
-        return self.at_node, self.at_node if self.if_path_end() else self._route[self.index + 1]
+        return (
+            self.at_node,
+            self.at_node if self.if_path_end() else self._route[self.index + 1],
+        )
 
     def if_path_end(self):
         return self.index == self._route_max
