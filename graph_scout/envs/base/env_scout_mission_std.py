@@ -730,6 +730,7 @@ class ScoutMissionStd(gym.Env):
             self.configs["num_blue"],
             self.configs["health_red"],
             self.configs["health_blue"],
+            self.configs["num_sub_step"],
             **self.configs["agents_init"],
         )
         _id, _name, _team = self.agents.get_observing_agent_info()
@@ -792,7 +793,15 @@ class ScoutMissionStd(gym.Env):
 
 
 class AgentManager:
-    def __init__(self, n_red=0, n_blue=0, health_red=0, health_blue=0, **agent_config):
+    def __init__(
+        self,
+        n_red=0,
+        n_blue=0,
+        health_red=0,
+        health_blue=0,
+        slow_level=4,
+        **agent_config,
+    ):
         # list of all agent object instances (sorted by global_id)
         self.gid = list()
 
@@ -809,10 +818,19 @@ class AgentManager:
         self.ids_R = list()  # team_id == 0 (red)
         self.ids_B = list()  # team_id == 1 (blue)
 
-        self._load_init_configs(n_red, n_blue, health_red, health_blue, **agent_config)
+        self._load_init_configs(
+            n_red, n_blue, health_red, health_blue, slow_level, **agent_config
+        )
+
+    def get_random_init(self):
+        # Randomly spawn uniformly in a location towards the North that red is trying to defend
+        ZONE1_SPAWNS = [85, 87, 94, 95, 96, 102, 103, 111, 112]
+        ZONE2_SPAWNS = [98, 99, 106, 106, 107, 108, 113, 114, 115]
+        _node = np.random.choice(ZONE1_SPAWNS + ZONE2_SPAWNS)
+        return _node
 
     def _load_init_configs(
-        self, n_red, n_blue, health_red, health_blue, **agent_config
+        self, n_red, n_blue, health_red, health_blue, slow_level, **agent_config
     ):
         # agent global_id is indexing from 0
         g_id = 0
@@ -840,7 +858,8 @@ class AgentManager:
 
             # learning agents
             if _type == "RL":
-                _node = a_dict["node"]
+                # _node = a_dict["node"]
+                _node = self.get_random_init()
                 self.gid.append(
                     AgentCoop(
                         global_id=g_id,
@@ -865,6 +884,7 @@ class AgentManager:
                         global_id=g_id,
                         name=_name,
                         team_id=_team,
+                        slow_level=slow_level,
                         health=_HP,
                         path=_path,
                         direction=_dir,
@@ -895,9 +915,10 @@ class AgentManager:
 
     def reset(self):
         for _id in self.ids_ob:
-            self.gid[_id].reset(
-                list_states=self.list_init[_id][0:-1], health=self.list_init[_id][-1]
-            )
+            _node = self.get_random_init()
+            _list_init = self.list_init[_id][0:-1]
+            _list_init[0] = _node
+            self.gid[_id].reset(list_states=_list_init, health=self.list_init[_id][-1])
         for _id in self.ids_dt:
             self.gid[_id].reset(
                 list_states=self.list_init[_id][0:-1],

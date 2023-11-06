@@ -4,11 +4,11 @@ init_setup = {
     "INIT_ENV": {
         "env_path": "./",
         "map_id": "Std",  # map version: 116 waypoints without real sub-nodes
-        "max_step": 50,
-        "num_sub_step": 4,
+        "max_step": 60,
+        "num_sub_step": 2,
         "num_red": 2,
         "num_blue": 2,
-        "health_red": 150,
+        "health_red": 10,
         "health_blue": 200,
         "agents_init": {
             "R_0": {
@@ -84,7 +84,7 @@ init_setup = {
             "rew_ep_delay": {
                 "type": "steps",
                 "inc": [0, 0.5, 1, 2, 3, 5, 5],
-                "step": [0, 16, 24, 32, 40, 48, 255],
+                "step": [0, 40, 44, 48, 52, 56, 255],
                 "max": 70,
             },
             "rew_ep_bonus": {"type": "thres", "value": 10, "bar": 33},  # 4 + 12 * 2.5

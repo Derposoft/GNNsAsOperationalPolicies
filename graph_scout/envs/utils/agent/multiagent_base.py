@@ -1,6 +1,16 @@
 class GSMAgent:
-    def __init__(self, global_id=0, name="A0", team_id=0, node=0,
-                 motion=0, direction=0, posture=0, health=100, _death=False):
+    def __init__(
+        self,
+        global_id=0,
+        name="A0",
+        team_id=0,
+        node=0,
+        motion=0,
+        direction=0,
+        posture=0,
+        health=100,
+        _death=False,
+    ):
         # basic info
         self.id = global_id
         self.name = name
@@ -26,13 +36,15 @@ class GSMAgent:
         if value != bool(value):
             raise TypeError("[GSMEnv][Agent] value must be a bool")
         self._death = value
-    
+
     # fast updating without verifying values
-    def set_states(self, num_list):
+    def set_states(self, num_list, verbose=False):
         self.at_node = num_list[0]
         self.motion = num_list[1]
         self.direction = num_list[2]
         self.posture = num_list[3]
+        if verbose:
+            print("resetting; set_states at_node = ", self.at_node)
 
     def set_acts(self, _move, _dir, _pos):
         self.motion = _move
@@ -56,8 +68,8 @@ class GSMAgent:
     def damage_given(self, num_point):
         self.damage += num_point
 
-    def reset(self, list_states, health=0, _death=False):
-        self.set_states(list_states)
+    def reset(self, list_states, health=0, _death=False, verbose=False):
+        self.set_states(list_states, verbose)
         self.damage = 0
         self.health = health if health else self.health_max
         self.death = _death

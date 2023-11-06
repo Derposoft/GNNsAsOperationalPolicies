@@ -2,11 +2,23 @@ from graph_scout.envs.utils.agent.multiagent_base import GSMAgent
 
 
 class AgentCoop(GSMAgent):
-    def __init__(self, global_id=0, name="R0", team_id=0, node=0,
-                 motion=0, direction=0, posture=0, health=100, _death=False,
-                 _learning=True, _observing=True):
-        super().__init__(global_id, name, team_id, node,
-                         motion, direction, posture, health, _death)
+    def __init__(
+        self,
+        global_id=0,
+        name="R0",
+        team_id=0,
+        node=0,
+        motion=0,
+        direction=0,
+        posture=0,
+        health=100,
+        _death=False,
+        _learning=True,
+        _observing=True,
+    ):
+        super().__init__(
+            global_id, name, team_id, node, motion, direction, posture, health, _death
+        )
         # interactive args
         self.engaged_total = 0
         # step args for mini-steps sum
@@ -39,8 +51,16 @@ class AgentCoop(GSMAgent):
             raise TypeError("[GSMEnv][Agent] value must be a bool")
         self._observing = value
 
-    def reset(self, list_states, health=100, _death=False, _learning=True, _observing=True):
-        super().reset(list_states, health, _death)
+    def reset(
+        self,
+        list_states,
+        health=100,
+        _death=False,
+        _learning=True,
+        _observing=True,
+        verbose=False,
+    ):
+        super().reset(list_states, health, _death, verbose)
         self.engaged_total = 0
         self.is_learning = _learning
         self.is_observing = _observing
