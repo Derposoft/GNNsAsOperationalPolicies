@@ -55,34 +55,42 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self.num_blue = kwargs["nblue"]
         self.aggregation_fn = kwargs["aggregation_fn"]
         self.hidden_size = kwargs["hidden_size"]
-        self.is_hybrid = kwargs[
-            "is_hybrid"
-        ]  # is this a hybrid model or a gat-only model?
+        self.is_hybrid = kwargs["is_hybrid"]  # is this a hybrid model or gat-only?
         self.conv_type = kwargs["conv_type"]
         self.layernorm = kwargs["layernorm"]
+        self.vis_enabled = kwargs.get("vis_enabled", False)
+        self._features = None  # current "base" output before logits
+        self._last_flat_in = None  # last input
+        self.action_space_output_dim = np.sum(action_space.nvec)
+        self.GAT_LAYERS = 2  # 1_6:1804, 3_50: ~15k
+        self.N_HEADS = 1 if self.conv_type == "gcn" else 4
+        self.HIDDEN_DIM = 2
+        self.hiddens = [self.hidden_size, self.hidden_size // 2]
+        gnn = GATv2Conv if self.conv_type == "gat" else GCNConv
+
+        # move graph instantiation
         self.adjacency = []
         for n in map.g_move.adj:
             ms = map.g_move.adj[n]
             for m in ms:
                 self.adjacency.append([n - 1, m - 1])
         self.adjacency = torch.LongTensor(self.adjacency).t().contiguous()
-        self._features = None  # current "base" output before logits
-        self._last_flat_in = None  # last input
-        self.action_space_output_dim = np.sum(action_space.nvec)
+
+        # vis graph instantiation TODO
+        if self.vis_enabled:
+            self.vis_adjacency = []
+            for n in map.g_view.adj:
+                ms = map.g_view.adj[n]
+                for m in ms:
+                    self.vis_adjacency.append([n - 1, m - 1])
+            self.vis_adjacency = torch.LongTensor(self.vis_adjacency).t().contiguous()
 
         """
         instantiate policy and value networks
         """
-        # self.GAT_LAYERS = 4
-        # self.N_HEADS = 1 if self.conv_type == "gcn" else 4
-        # self.HIDDEN_DIM = 4
-        self.GAT_LAYERS = 2  # 1_6:1804, 3_50: ~15k
-        self.N_HEADS = 1 if self.conv_type == "gcn" else 4
-        self.HIDDEN_DIM = 2
 
-        self.hiddens = [self.hidden_size, self.hidden_size // 2]  # TODO withut //2
-        gnn = GATv2Conv if self.conv_type == "gat" else GCNConv
-        self.gats = nn.ModuleList(
+        # move graph gnns
+        self.gnns = nn.ModuleList(
             [
                 gnn(
                     in_channels=utils.SCOUT_NODE_EMBED_SIZE
@@ -94,6 +102,22 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
                 for i in range(self.GAT_LAYERS)
             ]
         )
+
+        # vis graph gnns TODO
+        if self.vis_enabled:
+            self.vis_gnns = nn.ModuleList(
+                [
+                    gnn(
+                        in_channels=utils.SCOUT_NODE_EMBED_SIZE
+                        if i == 0
+                        else self.HIDDEN_DIM * self.N_HEADS,
+                        out_channels=self.HIDDEN_DIM,
+                        heads=self.N_HEADS,
+                    )
+                    for i in range(self.GAT_LAYERS)
+                ]
+            )
+
         self.norms = nn.ModuleList(
             [
                 BatchNorm(len(list(self.map.g_move.adj.keys())))
@@ -137,8 +161,6 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         produce debug output and ensure that model is on right device
         """
         utils.count_model_params(self, print_model=True)
-        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # self.to(self.device)
 
     @override(TMv2.TorchModelV2)
     def forward(
@@ -150,7 +172,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         utils.timeit("start")
 
         # transform obs to graph (for pyG, also do list[data]->torch_geometric.Batch)
-        obs = input_dict["obs_flat"].float()  # .to(self.device)
+        obs = input_dict["obs_flat"].float()
         utils.timeit(f"obs to float -- {len(obs)}")
         utils.check_device(self, "POLICY_MODEL")
         utils.check_device(obs, "obs")
@@ -174,7 +196,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
             x, batch_adjacency = graph.x, graph.edge_index
             utils.timeit("batching")
 
-        for conv, norm in zip(self.gats, self.norms):
+        for conv, norm in zip(self.gnns, self.norms):
             utils.check_device(conv, "convs")
             utils.check_device(x, "x_for_convs")
             if self.conv_type == "gcn":
