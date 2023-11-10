@@ -64,7 +64,7 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self.action_space_output_dim = np.sum(action_space.nvec)
         self.GAT_LAYERS = 2  # 1_6:1804, 3_50: ~15k
         self.N_HEADS = 1 if self.conv_type == "gcn" else 4
-        self.HIDDEN_DIM = 2
+        self.HIDDEN_DIM = 5 if self.conv_type == "gat" else 10
         self.hiddens = [self.hidden_size, self.hidden_size // 2]
         gnn = GATv2Conv if self.conv_type == "gat" else GCNConv
 

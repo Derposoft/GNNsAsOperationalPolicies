@@ -5,7 +5,7 @@ init_setup = {
         "env_path": "./",
         "map_id": "Std",  # map version: 116 waypoints without real sub-nodes
         "max_step": 60,
-        "num_sub_step": 2,
+        "num_sub_step": 4,
         "num_red": 2,
         "num_blue": 2,
         "health_red": 10,

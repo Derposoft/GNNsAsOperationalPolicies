@@ -75,6 +75,7 @@ class ScoutMissionStdRLLib(ScoutMissionStd, MultiAgentEnv):
             if done[k]:
                 self.done.add(k)
             all_done = all_done and done[k]
+        print(done)
         done["__all__"] = all_done
         truncateds["__all__"] = all_done
 
