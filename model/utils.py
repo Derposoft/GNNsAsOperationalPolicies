@@ -3,7 +3,6 @@ import sys
 import numpy as np
 import heapq
 from torchinfo import summary
-import ray
 from ray.rllib.utils.annotations import override
 from ray.rllib.models.torch.misc import SlimFC, normc_initializer
 import time
@@ -961,6 +960,8 @@ verbose = os.environ.get("verbose", False)
 
 
 def timeit(msg: str, n_digits: int = 4):
+    """Returns the time since the last call to timeit. If timeit hasn't been called,
+    returns the time since the first import of this file."""
     if verbose:
         global prev_time
         print(f"{time.time()-prev_time:2.{n_digits}f} {msg}")
