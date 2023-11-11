@@ -7,24 +7,27 @@ import dgl
 
 from model.nets.graph_transformer_edge_layer import GraphTransformerLayer
 from model.nets.mlp_readout_layer import MLPReadout
+import model.utils as utils
 
 
 """
 Graph Transformer with edge features
 """
+
+
 class GraphTransformerNet(nn.Module):
     def __init__(self, net_params):
         super().__init__()
         """
         read input configuration parameters
         """
-        #num_atom_type = net_params["num_atom_type"] # TODO if we want embedding layer
-        #num_bond_type = net_params["num_bond_type"]
+        # num_atom_type = net_params["num_atom_type"] # TODO if we want embedding layer
+        # num_bond_type = net_params["num_bond_type"]
         self.net_params = net_params
         num_bond_type = net_params.get("num_bond_type", 1)
         node_embedding_size = net_params["node_embedding_size"]
         self.num_actions = net_params.get("num_actions", 1)
-        hidden_dim = net_params["hidden_dim"] # import configs start here
+        hidden_dim = net_params["hidden_dim"]  # import configs start here
         num_heads = net_params["n_heads"]
         out_dim = net_params["out_dim"]
         in_feat_dropout = net_params["in_feat_dropout"]
@@ -38,9 +41,9 @@ class GraphTransformerNet(nn.Module):
         self.device = net_params["device"]
         self.lap_pos_enc = net_params["lap_pos_enc"]
         self.wl_pos_enc = net_params["wl_pos_enc"]
-        max_wl_role_index = 37 # this is maximum graph size in the dataset
+        max_wl_role_index = 37  # this is maximum graph size in the dataset
         print(f"GAT is using output function: {self.aggregation_fn}")
-        
+
         """
         build graph transformer network
         """
@@ -56,17 +59,20 @@ class GraphTransformerNet(nn.Module):
         else:
             self.embedding_e = nn.Linear(1, hidden_dim)
         self.in_feat_dropout = nn.Dropout(in_feat_dropout)
-        self.layers = nn.ModuleList([
-            GraphTransformerLayer(
-                hidden_dim,
-                hidden_dim,
-                num_heads,
-                dropout,
-                self.layer_norm,
-                self.batch_norm,
-                self.residual,
-            ) for _ in range(n_layers-1)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                GraphTransformerLayer(
+                    hidden_dim,
+                    hidden_dim,
+                    num_heads,
+                    dropout,
+                    self.layer_norm,
+                    self.batch_norm,
+                    self.residual,
+                )
+                for _ in range(n_layers - 1)
+            ]
+        )
         self.layers.append(
             GraphTransformerLayer(
                 hidden_dim,
@@ -85,10 +91,10 @@ class GraphTransformerNet(nn.Module):
         mlp_output_dim_by_agg_fn = {
             "default": out_dim,
             "agent_node": out_dim,
-            "hybrid_global_local": out_dim*2,
-            "hybrid": out_dim*2,
-            "5d": out_dim*5,
-            "full_graph": out_dim*28,
+            "hybrid_global_local": out_dim * 2,
+            "hybrid": out_dim * 2,
+            "5d": out_dim * 5,
+            "full_graph": out_dim * 28,
         }
         mlp_layers_by_agg_fn = {
             "default": 1,
@@ -98,13 +104,18 @@ class GraphTransformerNet(nn.Module):
             "5d": 2,
             "full_graph": 1,
         }
+        self.aggregator = utils.GeneralGNNPooling(
+            aggregator_name=self.aggregation_fn,
+            input_dim=mlp_output_dim_by_agg_fn.get(self.aggregation_fn, out_dim),
+            output_dim=self.num_actions,
+        )
         if self.aggregation_fn == "none":
             self.MLP_layer = None
         else:
             self.MLP_layer = MLPReadout(
                 mlp_output_dim_by_agg_fn.get(self.aggregation_fn, out_dim),
                 self.num_actions,
-                L=mlp_layers_by_agg_fn.get(self.aggregation_fn, 1)
+                L=mlp_layers_by_agg_fn.get(self.aggregation_fn, 1),
             )
             if self.aggregation_fn not in mlp_output_dim_by_agg_fn:
                 print(
@@ -112,8 +123,16 @@ class GraphTransformerNet(nn.Module):
                     this may cause problems later on."
                 )
 
-
-    def forward(self, g, h, e, h_lap_pos_enc=None, h_wl_pos_enc=None, agent_nodes=None, move_map=None):
+    def forward(
+        self,
+        g,
+        h,
+        e,
+        h_lap_pos_enc=None,
+        h_wl_pos_enc=None,
+        agent_nodes=None,
+        move_map=None,
+    ):
         """
         for more info on these inputs see: graph_transformer_rllib.py:forward()
         """
@@ -126,19 +145,33 @@ class GraphTransformerNet(nn.Module):
         if self.wl_pos_enc:
             h_wl_pos_enc = self.embedding_wl_pos_enc(h_wl_pos_enc)
             h = h + h_wl_pos_enc
-        if not self.edge_feat: # edge feature set to 1
-            #e = torch.ones(e.size(0),1).to(self.device)
-            e = torch.ones(g.number_of_edges(),1).to(self.device)
+        if not self.edge_feat:  # edge feature set to 1
+            # e = torch.ones(e.size(0),1).to(self.device)
+            e = torch.ones(g.number_of_edges(), 1).to(self.device)
         e = self.embedding_e(e)
-        
+
         # convnets
         for conv in self.layers:
             h, e = conv(g, h, e)
         g.ndata["h"] = h
 
-        """
+        batch_size = g.batch_num_nodes().shape[0]
+        h = h.reshape([batch_size, -1, h.shape[-1]])
+        return self.aggregator(h, None, agent_nodes)
+
+    def loss(self, scores, targets):
+        # loss = nn.MSELoss()(scores,targets)
+        loss = nn.L1Loss()(scores, targets)
+        return loss
+
+
+"""
+# JUNK
+
+
+        ""
         choosing the right output_fn/aggregation behavior using self.gat_output_fn
-        """
+        ""
         if (
             self.aggregation_fn == "agent_node"
             or self.aggregation_fn == "hybrid_global_local"
@@ -147,14 +180,19 @@ class GraphTransformerNet(nn.Module):
         ):
             # attempt 0; use curr node
             if agent_nodes != None:
-                idxs = [g.batch_num_nodes()[0]*i+agent_nodes[i] for i in range(int(h.shape[0]/g.batch_num_nodes()[0].item()))]
+                idxs = [
+                    g.batch_num_nodes()[0] * i + agent_nodes[i]
+                    for i in range(int(h.shape[0] / g.batch_num_nodes()[0].item()))
+                ]
                 local_node_embeddings = h[idxs, :]
-                if self.aggregation_fn == "agent_node" or self.aggregation_fn == "local":
+                if (
+                    self.aggregation_fn == "agent_node"
+                    or self.aggregation_fn == "local"
+                ):
                     return self.MLP_layer(local_node_embeddings)
                 global_mean_embeddings = dgl.mean_nodes(g, "h")
                 hybrid_embeddings = torch.concat(
-                    [local_node_embeddings, global_mean_embeddings],
-                    dim=-1
+                    [local_node_embeddings, global_mean_embeddings], dim=-1
                 )
                 return self.MLP_layer(hybrid_embeddings)
             else:
@@ -166,9 +204,12 @@ class GraphTransformerNet(nn.Module):
             h = h.reshape([batch_size, -1, h.shape[-1]])
             # where we end up if we move in direction i
             m0 = agent_nodes
-            #print(move_map)
+
+            # print(move_map)
             # return node in direction x if it exists; otherwise return the node itself
-            def dir_node(dir, node): return move_map[node+1][dir]-1 if dir in move_map[node+1] else -1
+            def dir_node(dir, node):
+                return move_map[node + 1][dir] - 1 if dir in move_map[node + 1] else -1
+
             m1 = [dir_node(1, agent_nodes[i]) for i in range(len(agent_nodes))]
             m2 = [dir_node(2, agent_nodes[i]) for i in range(len(agent_nodes))]
             m3 = [dir_node(3, agent_nodes[i]) for i in range(len(agent_nodes))]
@@ -176,7 +217,7 @@ class GraphTransformerNet(nn.Module):
             # embeddings of 0/1/2/3/4
             xs = range(batch_size)
             # collect embeddings
-            o = h[xs,[m0,m1,m2,m3,m4],:]
+            o = h[xs, [m0, m1, m2, m3, m4], :]
             o = torch.permute(o, [1, 0, 2]).reshape([batch_size, -1])
             return self.MLP_layer(o)
         elif self.aggregation_fn == "full_graph":
@@ -187,7 +228,10 @@ class GraphTransformerNet(nn.Module):
         elif self.aggregation_fn == "none":
             # attempt 3: no readout; only current agent node
             if agent_nodes != None:
-                idxs = [g.batch_num_nodes()[0]*i+agent_nodes[i] for i in range(int(h.shape[0]/g.batch_num_nodes()[0].item()))]
+                idxs = [
+                    g.batch_num_nodes()[0] * i + agent_nodes[i]
+                    for i in range(int(h.shape[0] / g.batch_num_nodes()[0].item()))
+                ]
                 _embeddings = h[idxs, :]
                 return _embeddings
         else:
@@ -202,8 +246,5 @@ class GraphTransformerNet(nn.Module):
                 hg = dgl.mean_nodes(g, "h")  # default readout is mean nodes
             return self.MLP_layer(hg)
 
-        
-    def loss(self, scores, targets):
-        # loss = nn.MSELoss()(scores,targets)
-        loss = nn.L1Loss()(scores, targets)
-        return loss
+
+"""

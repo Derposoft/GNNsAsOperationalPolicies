@@ -69,7 +69,7 @@ class ScoutMissionStd(gym.Env):
         b2_expected = 84
         b1 = self.agents.gid[self.agents.ids_dt[0]].at_node
         b2 = self.agents.gid[self.agents.ids_dt[1]].at_node
-        print(f"[blue 0 / blue 1] [{b1} / {b2}]")
+        # print(f"[blue 0 / blue 1] [{b1} / {b2}]")
         force_stop = b1 == b1_expected and b2 == b2_expected
         # n_rewards = self.states.get_reward_list(self.step_counter)
         # True: if an agent loses all health points (or @max_step)

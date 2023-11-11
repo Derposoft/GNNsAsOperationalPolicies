@@ -38,7 +38,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         model_config: ModelConfigDict,
         name: str,
         map: MapInfo,
-        **kwargs
+        **kwargs,
     ):
         TMv2.TorchModelV2.__init__(
             self, obs_space, action_space, num_outputs, model_config, name
@@ -133,12 +133,16 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
     ):
         # start_time = time.time()
         obs = input_dict["obs_flat"].float()
+        utils.timeit(f"START -- batchsize={len(obs)}")
         current_device = next(self.parameters()).device
         utils.check_device(obs, "obs")
 
         # transform obs to graph
         attention_input = utils.scout_embed_obs_in_map(obs, self.map, current_device)
-        agent_nodes = [utils.get_loc(gx, self.map.get_graph_size()) for gx in obs]
+        agent_nodes_new = (obs[:, : self.map.get_graph_size()] == 2).nonzero()
+        assert len(obs) == len(agent_nodes_new) or len(agent_nodes_new) == 0
+        agent_nodes = agent_nodes_new
+        utils.timeit(f"agent node get")
 
         if len(obs) not in self.cache:
             batch_graphs = []
@@ -152,6 +156,7 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         batch_graphs.ndata["feat"] = attention_input.reshape(
             [-1, utils.SCOUT_NODE_EMBED_SIZE]
         )
+        utils.timeit("batching")
 
         # inference
         batch_x = batch_graphs.ndata["feat"]
@@ -168,12 +173,14 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self._features = self._hiddens(torch.cat([gat_output, obs], dim=1))
         utils.check_device(self._features, "features")
         utils.check_device(self._hiddens, "hiddens")
+        utils.timeit("convs")
 
         # return
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
         logits = self._logits(self._features)
         # print("forward takes", time.time() - start_time)
         utils.check_device(logits, "logits")
+        utils.timeit("logits")
         return logits, state
 
     @override(TMv2.TorchModelV2)
