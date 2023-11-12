@@ -145,3 +145,4 @@ test_logs/
 # data/parsed/
 #potential_checkpoints/
 nohup.out
+*.out

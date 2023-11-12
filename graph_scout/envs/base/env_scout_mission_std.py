@@ -15,6 +15,7 @@ class ScoutMissionStd(gym.Env):
         self.agents = None
         self.states = None
         self.map = None
+        self.is_evaluation = kwargs.get("is_evaluation", False)
 
         self.step_counter = 0
         self.done_counter = 0
@@ -688,15 +689,21 @@ class ScoutMissionStd(gym.Env):
 
         # load or generate graphs
         self.map = MapInfo()
-        # _files, _flags = check_parsed_files(self.configs["env_path"], self.configs["map_id"])
-        # if all(_flags):
-        #     self.map = load_graph_files(self.configs["env_path"], self.configs["map_id"], _files)
-        # else:
-        #     self.map = generate_graph_files(self.configs["env_path"], self.configs["map_id"])
-        # generate new heterogeneous graphs during init to avoid GEXF/GML/pickle I/O issues..
-        self.map = generate_graph_files(
+        _files, _flags = check_parsed_files(
             self.configs["env_path"], self.configs["map_id"]
         )
+        if all(_flags):
+            self.map = load_graph_files(
+                self.configs["env_path"], self.configs["map_id"], _files
+            )
+        else:
+            self.map = generate_graph_files(
+                self.configs["env_path"], self.configs["map_id"]
+            )
+        # generate new heterogeneous graphs during init to avoid GEXF/GML/pickle I/O issues..
+        # self.map = generate_graph_files(
+        #     self.configs["env_path"], self.configs["map_id"]
+        # )
         # set up range limits
         self.zones = self.configs["engage_range"]
         # manually adjust the probs for imbalance node pairs
@@ -736,6 +743,7 @@ class ScoutMissionStd(gym.Env):
             self.configs["health_red"],
             self.configs["health_blue"],
             self.configs["num_sub_step"],
+            is_evaluation=self.is_evaluation,
             **self.configs["agents_init"],
         )
         _id, _name, _team = self.agents.get_observing_agent_info()
@@ -805,8 +813,14 @@ class AgentManager:
         health_red=0,
         health_blue=0,
         slow_level=4,
+        is_evaluation=False,
         **agent_config,
     ):
+        ZONE1_SPAWNS = [85, 87, 94, 95, 96, 102, 103, 111, 112]
+        ZONE2_SPAWNS = [98, 99, 106, 106, 107, 108, 113, 114, 115]
+        self.POSSIBLE_SPAWNS = ZONE1_SPAWNS + ZONE2_SPAWNS
+        self.is_evaluation = is_evaluation
+        self.n_times_spawned = 0
         # list of all agent object instances (sorted by global_id)
         self.gid = list()
 
@@ -828,11 +842,20 @@ class AgentManager:
         )
 
     def get_random_init(self):
-        # Randomly spawn uniformly in a location towards the North that red is trying to defend
-        ZONE1_SPAWNS = [85, 87, 94, 95, 96, 102, 103, 111, 112]
-        ZONE2_SPAWNS = [98, 99, 106, 106, 107, 108, 113, 114, 115]
-        _node = np.random.choice(ZONE1_SPAWNS + ZONE2_SPAWNS)
-        return _node
+        # Stochastic agent spawning if not in eval mode
+        if not self.is_evaluation:
+            # Randomly spawn uniformly in a location towards the North that red is trying to defend
+            _node = np.random.choice(self.POSSIBLE_SPAWNS)
+            return _node
+
+        # If in eval mode, perform deterministic spawning
+        else:
+            # Deterministically spawn based on the number of times this fn is called
+            _node = self.POSSIBLE_SPAWNS[self.n_times_spawned]
+            self.n_times_spawned += 1
+            if self.n_times_spawned >= len(self.POSSIBLE_SPAWNS):
+                self.n_times_spawned = 0
+            return _node
 
     def _load_init_configs(
         self, n_red, n_blue, health_red, health_blue, slow_level, **agent_config

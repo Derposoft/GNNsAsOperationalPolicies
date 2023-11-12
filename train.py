@@ -14,6 +14,7 @@ except:
     print("Couldn't turn off warnings. Continuing anyways...")
 
 import argparse
+from copy import deepcopy
 import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
@@ -115,6 +116,8 @@ def create_trainer(config, trainer_type=None, custom_model=""):
     # initialize env and required config settings
     env = ScoutMissionStdRLLib if "scout" in custom_model else Figure8SquadRLLib
     env_config = create_env_config(config)
+    env_config_evaluation = deepcopy(env_config)
+    env_config_evaluation["is_evaluation"] = True
     setup_env = env(env_config)
     obs_space = setup_env.observation_space
     act_space = setup_env.action_space
@@ -175,6 +178,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
             evaluation_interval=1,
             evaluation_duration_unit="episodes",
             evaluation_num_workers=1,
+            evaluation_config={"env_config": env_config_evaluation},
         )
         .debugging(
             logger_creator=lambda x: custom_log_creator(config.name)(x),
