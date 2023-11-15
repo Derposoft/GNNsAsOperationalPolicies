@@ -1,47 +1,91 @@
 {
-    "gtscout_210h-10hp-400bs-1em4lr-eval_OPT-HG_global": {
-        "model": "gt_scout",
-        "aggregation_fn": "global",
+    "gcnscout_210h-10hp-400bs-1em4lr-eval_NOOPT_local": {
+        "model": "gnn_scout",
+        "conv_type": "gcn",
+        "aggregation_fn": "local",
+        "hidden_size": 210
+    },
+    "gcnscout_210h-10hp-400bs-1em4lr-eval_OPT-HG_local": {
+        "model": "gnn_scout",
+        "conv_type": "gcn",
+        "aggregation_fn": "local",
         "hidden_size": 210,
         "embed_opt": "",
         "opt_scout_high_ground": ""
     },
-    "gtscout_210h-10hp-400bs-1em4lr-eval_OPT-HGR_global": {
-        "model": "gt_scout",
-        "aggregation_fn": "global",
+    "gcnscout_210h-10hp-400bs-1em4lr-eval_OPT-HGR_local": {
+        "model": "gnn_scout",
+        "conv_type": "gcn",
+        "aggregation_fn": "local",
         "hidden_size": 210,
         "embed_opt": "",
         "opt_scout_high_ground_relevance": ""
     },
-    "gtscout_210h-10hp-400bs-1em4lr-eval_OPT-HG-HGR_global": {
-        "model": "gt_scout",
-        "aggregation_fn": "global",
+    "gcnscout_210h-10hp-400bs-1em4lr-eval_OPT-HG-HGR_local": {
+        "model": "gnn_scout",
+        "conv_type": "gcn",
+        "aggregation_fn": "local",
         "hidden_size": 210,
         "embed_opt": "",
         "opt_scout_high_ground": "",
         "opt_scout_high_ground_relevance": ""
     },
 
-    "gatscout_210h-10hp-400bs-1em4lr-eval_OPT-HG_global": {
+
+    "gatscout_210h-10hp-400bs-1em4lr-eval_NOOPT_local": {
         "model": "gnn_scout",
         "conv_type": "gat",
-        "aggregation_fn": "global",
+        "aggregation_fn": "local",
+        "hidden_size": 210
+    },
+    "gatscout_210h-10hp-400bs-1em4lr-eval_OPT-HG_local": {
+        "model": "gnn_scout",
+        "conv_type": "gat",
+        "aggregation_fn": "local",
         "hidden_size": 210,
         "embed_opt": "",
         "opt_scout_high_ground": ""
     },
-    "gatscout_210h-10hp-400bs-1em4lr-eval_OPT-HGR_global": {
+    "gatscout_210h-10hp-400bs-1em4lr-eval_OPT-HGR_local": {
         "model": "gnn_scout",
         "conv_type": "gat",
-        "aggregation_fn": "global",
+        "aggregation_fn": "local",
         "hidden_size": 210,
         "embed_opt": "",
         "opt_scout_high_ground_relevance": ""
     },
-    "gatscout_210h-10hp-400bs-1em4lr-eval_OPT-HG-HGR_global": {
+    "gatscout_210h-10hp-400bs-1em4lr-eval_OPT-HG-HGR_local": {
         "model": "gnn_scout",
         "conv_type": "gat",
-        "aggregation_fn": "global",
+        "aggregation_fn": "local",
+        "hidden_size": 210,
+        "embed_opt": "",
+        "opt_scout_high_ground": "",
+        "opt_scout_high_ground_relevance": ""
+    },
+
+    "gtscout_210h-10hp-400bs-1em4lr-eval_NOOPT_local": {
+        "model": "gt_scout",
+        "aggregation_fn": "local",
+        "hidden_size": 210
+    },
+    "gtscout_210h-10hp-400bs-1em4lr-eval_OPT-HG_local": {
+        "model": "gt_scout",
+        "aggregation_fn": "local",
+        "hidden_size": 210,
+        "embed_opt": "",
+        "opt_scout_high_ground": ""
+    },
+    "gtscout_210h-10hp-400bs-1em4lr-eval_OPT-HGR_local": {
+        "model": "gt_scout",
+        "aggregation_fn": "local",
+        "hidden_size": 210,
+        "embed_opt": "",
+        "opt_scout_high_ground_relevance": ""
+    },
+    "gtscout_210h-10hp-400bs-1em4lr-eval_OPT-HG-HGR_local": {
+        "model": "gt_scout",
+        "aggregation_fn": "local",
         "hidden_size": 210,
         "embed_opt": "",
         "opt_scout_high_ground": "",
