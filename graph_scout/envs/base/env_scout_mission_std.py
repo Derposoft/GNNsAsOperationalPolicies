@@ -851,6 +851,7 @@ class AgentManager:
         # If in eval mode, perform deterministic spawning
         else:
             # Deterministically spawn based on the number of times this fn is called
+            # print(f"evaluating at nodeidx={self.n_times_spawned}")
             _node = self.POSSIBLE_SPAWNS[self.n_times_spawned]
             self.n_times_spawned += 1
             if self.n_times_spawned >= len(self.POSSIBLE_SPAWNS):

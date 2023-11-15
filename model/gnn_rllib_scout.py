@@ -62,9 +62,22 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self._features = None  # current "base" output before logits
         self._last_flat_in = None  # last input
         self.action_space_output_dim = np.sum(action_space.nvec)
-        self.GAT_LAYERS = 2  # 1_6:1804, 3_50: ~15k
-        self.N_HEADS = 1 if self.conv_type == "gcn" else 4
-        self.HIDDEN_DIM = 5 if self.conv_type == "gat" else 10
+
+        ###### HYPERPARAMETERS
+        gcn_num_layers = 2
+        gcn_hidden_dim = 5
+
+        gat_num_layers = 2
+        gat_hidden_dim = 5
+        gat_num_heads = 4
+        #########################
+        print(f"USING CONV TYPE: {self.conv_type}")
+        self.GAT_LAYERS = (
+            gcn_num_layers if self.conv_type == "gcn" else gat_num_layers
+        )  # 1_6:1804, 3_50: ~15k
+
+        self.N_HEADS = 1 if self.conv_type == "gcn" else gat_num_heads
+        self.HIDDEN_DIM = gcn_hidden_dim if self.conv_type == "gcn" else gat_hidden_dim
         self.hiddens = [self.hidden_size, self.hidden_size // 2]
         gnn = GATv2Conv if self.conv_type == "gat" else GCNConv
 
@@ -88,7 +101,33 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
         """
         instantiate policy and value networks
         """
+        if self.is_hybrid:
+            self._hiddens, self._logits = utils.create_policy_fc(
+                hiddens=self.hiddens,
+                activation=activation,
+                num_outputs=num_outputs,
+                no_final_linear=no_final_linear,
+                num_inputs=int(np.product(obs_space.shape)) + num_outputs,
+            )
+        else:
+            self._hiddens, self._logits = (
+                None,
+                utils.create_policy_fc(
+                    hiddens=self.hiddens,
+                    activation=activation,
+                    num_outputs=num_outputs,
+                    no_final_linear=no_final_linear,
+                    num_inputs=int(np.product(obs_space.shape)) + num_outputs,
+                )[1],
+            )
 
+        self._value_branch, self._value_branch_separate = utils.create_value_branch(
+            num_inputs=int(np.product(obs_space.shape)),
+            num_outputs=num_outputs,
+            vf_share_layers=self.vf_share_layers,
+            activation=activation,
+            hiddens=utils.VALUE_HIDDENS,
+        )
         # move graph gnns
         self.gnns = nn.ModuleList(
             [
@@ -128,33 +167,6 @@ class GNNScoutPolicy(TMv2.TorchModelV2, nn.Module):
             aggregator_name=self.aggregation_fn,
             input_dim=self.HIDDEN_DIM * self.N_HEADS,
             output_dim=self.action_space_output_dim,
-        )
-        if self.is_hybrid:
-            self._hiddens, self._logits = utils.create_policy_fc(
-                hiddens=self.hiddens,
-                activation=activation,
-                num_outputs=num_outputs,
-                no_final_linear=no_final_linear,
-                num_inputs=int(np.product(obs_space.shape)) + num_outputs,
-            )
-        else:
-            self._hiddens, self._logits = (
-                None,
-                utils.create_policy_fc(
-                    hiddens=self.hiddens,
-                    activation=activation,
-                    num_outputs=num_outputs,
-                    no_final_linear=no_final_linear,
-                    num_inputs=int(np.product(obs_space.shape)) + num_outputs,
-                )[1],
-            )
-
-        self._value_branch, self._value_branch_separate = utils.create_value_branch(
-            num_inputs=int(np.product(obs_space.shape)),
-            num_outputs=num_outputs,
-            vf_share_layers=self.vf_share_layers,
-            activation=activation,
-            hiddens=utils.VALUE_HIDDENS,
         )
 
         """

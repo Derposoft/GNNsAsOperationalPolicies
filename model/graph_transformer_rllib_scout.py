@@ -81,9 +81,10 @@ class HybridScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self.HIDDEN_DIM = 4
         """
         # self.hidden_proj_sizes = [150, 150]
-        self.hiddens = [self.hidden_size, self.hidden_size]
+        self.hiddens = [self.hidden_size, self.hidden_size // 2]
         # self.hidden_proj_sizes = [177, 177]
-        self.GAT_LAYERS = 4
+        # self.GAT_LAYERS = 4
+        self.GAT_LAYERS = 2
         self.N_HEADS = 4
         self.HIDDEN_DIM = 4
 

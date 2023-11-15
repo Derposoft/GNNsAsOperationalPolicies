@@ -114,7 +114,8 @@ def create_trainer(config, trainer_type=None, custom_model=""):
     assert trainer_type != None, f"trainer_type must be one of {trainer_types}"
 
     # initialize env and required config settings
-    env = ScoutMissionStdRLLib if "scout" in custom_model else Figure8SquadRLLib
+    is_scout = "scout" in custom_model
+    env = ScoutMissionStdRLLib if is_scout else Figure8SquadRLLib
     env_config = create_env_config(config)
     env_config_evaluation = deepcopy(env_config)
     env_config_evaluation["is_evaluation"] = True
@@ -157,6 +158,12 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         },
     }
 
+    # Set evaluation duration for scout and skirmish simulations, depending on the number of spawn locations in each
+    ZONE1_SPAWNS = [85, 87, 94, 95, 96, 102, 103, 111, 112]
+    ZONE2_SPAWNS = [98, 99, 106, 106, 107, 108, 113, 114, 115]
+    POSSIBLE_SPAWNS = ZONE1_SPAWNS + ZONE2_SPAWNS
+    evaluation_duration = len(POSSIBLE_SPAWNS) if is_scout else 7
+
     model_config = CUSTOM_DEFAULTS if custom_model != "" else MODEL_DEFAULTS
     batch_size = config.batch_size
     return (
@@ -176,6 +183,7 @@ def create_trainer(config, trainer_type=None, custom_model=""):
         )
         .evaluation(
             evaluation_interval=1,
+            evaluation_duration=evaluation_duration,
             evaluation_duration_unit="episodes",
             evaluation_num_workers=1,
             evaluation_config={"env_config": env_config_evaluation},
@@ -254,8 +262,8 @@ def parse_arguments():
     parser.add_argument(
         "--env_path", type=str, default=".", help="path of the project root"
     )
-    parser.add_argument("--n_red", type=int, default=1, help="numbers of red agent")
-    parser.add_argument("--n_blue", type=int, default=1, help="numbers of blue agent")
+    parser.add_argument("--n_red", type=int, default=2, help="numbers of red agent")
+    parser.add_argument("--n_blue", type=int, default=2, help="numbers of blue agent")
     parser.add_argument(
         "--n_episode",
         type=int,
@@ -266,7 +274,7 @@ def parse_arguments():
         "--max_step", type=int, default=None, help="max step for each episode"
     )
     parser.add_argument(
-        "--init_health", type=int, default=20, help="initial HP for all agents"
+        "--init_health", type=int, default=10, help="initial HP for all agents"
     )
     # advanced configs
     parser.add_argument(
@@ -365,18 +373,19 @@ def parse_arguments():
     parser.add_argument("--conv_type", default="gcn", choices=["gcn", "gat"])
     parser.add_argument(
         "--layernorm",
-        type=bool,
+        # type=bool,
         default=False,
         help="add layer norm in between each layer of graph network",
+        action="store_true",
     )
     parser.add_argument(
         "--aggregation_fn",
         type=str,
-        default="agent_node",
+        default="global",
         help="which output fn to use after gat",
     )
     parser.add_argument(
-        "--hidden_size", type=int, default=10, help="size of the hidden layer to use"
+        "--hidden_size", type=int, default=210, help="size of the hidden layer to use"
     )  # 169
     parser.add_argument(
         "--train_time", type=int, default=200, help="how long to train the model"
@@ -390,8 +399,8 @@ def parse_arguments():
     parser.add_argument(
         "--seed", type=int, default=0, help="seed to use for reproducibility purposes"
     )
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--batch_size", type=int, default=800, help="batch size")
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--batch_size", type=int, default=400, help="batch size")
 
     # graph obs config
     parser.add_argument(
