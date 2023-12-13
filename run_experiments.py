@@ -22,12 +22,15 @@ import os
 import argparse
 import ray._private.services as services
 
-N_PROCS = 10  # multiprocessing.cpu_count() // 2
-N_CPUS = 30
+# STABLE: 10 procs, 30 cpu
+
+N_PROCS = 20  # multiprocessing.cpu_count() // 2
+N_CPUS = 40
 N_SEEDS = 10  # TODO change back to 10 after tuning
 START_SEED = 0
 # 60k eps required; n_eps = TRAIN_TIME * batch_size, so this number has to go up if we use a smaller batch size and down if we use a larger batch size
-TRAIN_TIME = 150  # equivalent to 60k eps. scout env models tend to plateau at ~50k and skirmish at ~30-40k (?)
+# TRAIN_TIME = 150  # equivalent to 60k steps. scout env models tend to plateau at ~50k and skirmish at ~30-40k (?)
+TRAIN_TIME = 2500  # equivalent to 1m steps. using to test change in std dev.
 
 
 # https://stackoverflow.com/questions/25120363/multiprocessing-execute-external-command-and-wait-before-proceeding

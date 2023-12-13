@@ -107,6 +107,8 @@ class FCScoutPolicy(TMv2.TorchModelV2, nn.Module):
         self._features = None
         self._last_flat_in = None
 
+        # He initialization for all model weights
+        # utils.he_init(self)  # TODO remove if this is worse.
         utils.count_model_params(self, True)
 
     @override(TMv2.TorchModelV2)

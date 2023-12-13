@@ -955,6 +955,18 @@ class GeneralGNNPooling(nn.Module):
         return x  # self.softmax(x)
 
 
+def he_init(module: nn.Module):
+    """Initialize model weights using kaiming/he initialiation"""
+    n_params_initted = 0
+    for name, param in module.named_parameters():
+        n_params_initted += np.prod([x for x in param.shape])
+        if "weight" in name:
+            torch.nn.init.kaiming_normal_(param, mode="fan_out", nonlinearity="relu")
+        elif "bias" in name:
+            torch.nn.init.constant_(param, 0.0)
+    print(f"initialized {n_params_initted} params with He initialization")
+
+
 prev_time = time.time()
 verbose = os.environ.get("verbose", False)
 
